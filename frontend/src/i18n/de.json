@@ -10,6 +10,8 @@
     "leads": "Leads",
     "accounts": "Accounts",
     "contacts": "Kontakte",
+    "opportunities": "Opportunities",
+    "products": "Produkte",
     "import": "Import",
     "settings": "Einstellungen"
   },
@@ -25,6 +27,132 @@
   },
   "placeholder": {
     "body": "Diese Seite folgt in einem späteren Inkrement."
+  },
+  "dashboard": {
+    "heading": "Dashboard",
+    "range": {
+      "label": "Zeitraum",
+      "last7": "Letzte 7 Tage",
+      "last30": "Letzte 30 Tage",
+      "last90": "Letzte 90 Tage"
+    },
+    "kpisLoadError": "Kennzahlen konnten nicht geladen werden: {{message}}",
+    "kpi": {
+      "revenue": "Umsatz",
+      "wonLost": "Gewonnen / Verloren",
+      "winRate": "Win-Rate",
+      "avgSalesCycle": "Ø Sales-Cycle",
+      "daysValue": "{{value}} Tage",
+      "openPipeline": "Pipeline offen",
+      "weightedPipeline": "Pipeline gewichtet",
+      "activities": "Aktivitäten"
+    },
+    "revenueChart": {
+      "title": "Umsatzverlauf",
+      "revenue": "Umsatz",
+      "loadError": "Umsatz-Zeitreihe konnte nicht geladen werden: {{message}}"
+    },
+    "funnelChart": {
+      "title": "Pipeline-Funnel",
+      "count": "Anzahl",
+      "amount": "Betrag",
+      "weighted": "Gewichtet",
+      "loadError": "Pipeline-Funnel konnte nicht geladen werden: {{message}}"
+    },
+    "leaderboard": {
+      "title": "Leaderboard",
+      "user": "Nutzer",
+      "revenue": "Umsatz",
+      "wonCount": "Gewonnen",
+      "empty": "Keine Abschlüsse im Zeitraum.",
+      "loadError": "Leaderboard konnte nicht geladen werden: {{message}}"
+    }
+  },
+  "notifications": {
+    "title": "Benachrichtigungen",
+    "empty": "Keine ungelesenen Benachrichtigungen.",
+    "markAllRead": "Alle als gelesen markieren",
+    "leadSlaBreach": "SLA verletzt: {{title}}",
+    "actionError": "Aktion fehlgeschlagen: {{message}}"
+  },
+  "settings": {
+    "heading": "Einstellungen",
+    "loading": "Einstellungen werden geladen …",
+    "adminOnly": "Diese Seite ist nur für Administratoren verfügbar.",
+    "loadError": "Einstellungen konnten nicht geladen werden: {{message}}",
+    "tenant": {
+      "title": "Mandant",
+      "name": "Name",
+      "plan": "Plan",
+      "currency": "Standardwährung"
+    },
+    "form": {
+      "title": "Richtlinien",
+      "slaHours": "SLA (Stunden)",
+      "leadRetentionMonths": "Lead-Aufbewahrung (Monate)",
+      "invalidNumber": "Bitte eine gültige Zahl eingeben."
+    },
+    "saveSuccess": "Einstellungen wurden gespeichert.",
+    "saveError": "Einstellungen konnten nicht gespeichert werden: {{message}}"
+  },
+  "products": {
+    "heading": "Produkte",
+    "create": "Produkt anlegen",
+    "loading": "Produkte werden geladen …",
+    "empty": "Keine Produkte gefunden.",
+    "loadError": "Produkte konnten nicht geladen werden: {{message}}",
+    "columns": {
+      "sku": "SKU",
+      "name": "Name",
+      "category": "Kategorie",
+      "listPrice": "Listenpreis",
+      "active": "Status"
+    },
+    "state": {
+      "active": "Aktiv",
+      "inactive": "Inaktiv"
+    },
+    "rowActions": {
+      "edit": "Produkt bearbeiten"
+    },
+    "form": {
+      "createTitle": "Produkt anlegen",
+      "editTitle": "Produkt bearbeiten",
+      "sku": "SKU",
+      "name": "Name",
+      "category": "Kategorie",
+      "listPrice": "Listenpreis",
+      "active": "Aktiv",
+      "skuRequired": "SKU ist ein Pflichtfeld.",
+      "nameRequired": "Name ist ein Pflichtfeld.",
+      "listPriceRequired": "Bitte einen gültigen Listenpreis angeben."
+    },
+    "createSuccess": "Produkt wurde angelegt.",
+    "createError": "Produkt konnte nicht angelegt werden: {{message}}",
+    "updateSuccess": "Produkt wurde aktualisiert.",
+    "updateError": "Produkt konnte nicht aktualisiert werden: {{message}}"
+  },
+  "opportunities": {
+    "heading": "Opportunities",
+    "loading": "Opportunities werden geladen …",
+    "empty": "Keine Opportunities gefunden.",
+    "loadError": "Opportunities konnten nicht geladen werden: {{message}}",
+    "filter": {
+      "status": "Status",
+      "all": "Alle Status"
+    },
+    "columns": {
+      "name": "Name",
+      "amount": "Betrag",
+      "status": "Status",
+      "stage": "Stage",
+      "expectedCloseDate": "Erw. Abschlussdatum"
+    },
+    "status": {
+      "OPEN": "Offen",
+      "WON": "Gewonnen",
+      "LOST": "Verloren"
+    }
   },
   "leads": {
     "heading": "Leads",

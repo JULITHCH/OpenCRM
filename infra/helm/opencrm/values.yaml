@@ -1,0 +1,142 @@
+# Default-Values fuer das OpenCRM-Chart (prod-nah, vgl. docs/11-deployment-und-betrieb.md).
+#
+# NICHT Teil dieses Charts (laufen extern):
+#   - PostgreSQL: Managed Service empfohlen (E-45), Fallback CloudNativePG-Operator
+#   - Keycloak:   eigenes Deployment ueber den Keycloak-Operator, externe DB (E-46)
+#   - Objekt-Storage (S3): Provider-Service; Phase 1 nutzt lokalen Storage (emptyDir)
+#
+# Secrets liegen NIE in Values (docs/11 Abschnitt 3.2): der External Secrets
+# Operator synchronisiert sie aus dem Secret-Store des Providers in
+# Kubernetes-Secrets; das Chart referenziert nur Secret-NAMEN.
+
+nameOverride: ""
+fullnameOverride: ""
+
+# Pull-Secrets fuer die Registry (z. B. GHCR), falls noetig
+imagePullSecrets: []
+#  - name: ghcr-pull-secret
+
+backend:
+  # Nur wirksam, wenn hpa.enabled=false; sonst regelt der HPA (min 2, max 6).
+  # staging: 1 Replica (values-staging.yaml), prod: 2-6 (docs/11 Abschnitt 1)
+  replicaCount: 2
+
+  image:
+    repository: ghcr.io/julith-gmbh/opencrm-backend
+    # CI setzt stattdessen den Digest (--set backend.image.digest=sha256:...);
+    # `latest` ist verboten (docs/11 Abschnitt 3.2)
+    tag: "0.1.0"
+    # Hat Vorrang vor tag, Format "sha256:..."
+    digest: ""
+    pullPolicy: IfNotPresent
+
+  env:
+    # Issuer-URI des Keycloak-Realms (iss-Validierung + JWKS-Discovery);
+    # Platzhalter-Domain bis zur Domain-Entscheidung (E-23/E-53)
+    keycloakIssuerUri: "https://auth.opencrm.example/realms/opencrm"
+    # Name eines EXTERN verwalteten Secrets (External Secrets Operator) mit den Keys:
+    #   DB_URL, DB_USER, DB_PASSWORD, DB_MIGRATOR_USER, DB_MIGRATOR_PASSWORD
+    # (App-Rolle ohne BYPASSRLS, Migrator-Rolle fuer Flyway — docs/04, docs/11 Abschnitt 5)
+    dbSecretName: "opencrm-db"
+    # Ablagepfad fuer Import-/Export-Dateien (Phase 1: emptyDir, s. Deployment-TODO)
+    storageRoot: "/var/opencrm/storage"
+    # Zusaetzliche Env-Eintraege (Liste von name/value bzw. name/valueFrom)
+    extra: []
+    #  - name: SPRING_PROFILES_ACTIVE
+    #    value: prod
+
+  resources:
+    requests:
+      cpu: 500m
+      memory: 768Mi
+    limits:
+      # bewusst kein CPU-Limit (Throttling vermeiden); HPA regelt auf CPU-Requests
+      memory: 1536Mi
+
+  hpa:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+
+  service:
+    port: 8080
+
+frontend:
+  replicaCount: 2
+
+  image:
+    repository: ghcr.io/julith-gmbh/opencrm-frontend
+    tag: "0.1.0"
+    digest: ""
+    pullPolicy: IfNotPresent
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      memory: 128Mi
+
+  service:
+    port: 8080
+
+ingress:
+  enabled: true
+  className: nginx
+  # Platzhalter bis zur Domain-Entscheidung (E-23/E-53)
+  host: app.opencrm.example
+  annotations: {}
+  #  cert-manager.io/cluster-issuer: letsencrypt-prod
+  tls:
+    enabled: true
+    # cert-manager legt das Zertifikat in dieses Secret ab (docs/11 Abschnitt 9)
+    secretName: opencrm-tls
+  # Optionaler Pfad /realms -> Keycloak unter demselben Host. Standard ist
+  # AUS: Keycloak laeuft extern mit eigenem Host (auth.opencrm.example) und
+  # eigenem Ingress ueber den Operator (E-46).
+  keycloak:
+    enabled: false
+    serviceName: keycloak-service
+    servicePort: 8080
+
+networkPolicies:
+  # E-47: Cluster-intern NetworkPolicies-only in Phase 1 (kein Service-Mesh);
+  # Default-Deny eingehend + explizite Erlaubnisse.
+  enabled: true
+
+  # Woher der Ingress-Controller kommt (fuer Ingress -> frontend/backend).
+  # Labels an das eigene Cluster anpassen.
+  ingressController:
+    namespaceSelector:
+      kubernetes.io/metadata.name: ingress-nginx
+    # Optional zusaetzlich auf Pods einschraenken (leer = alle Pods im Namespace)
+    podSelector: {}
+
+  # Egress des Backends zu den externen Abhaengigkeiten. Ein Egress-Policy-Match
+  # schaltet fuer Backend-Pods ALLES andere ausgehend ab — Ziele hier pflegen.
+  backendEgress:
+    enabled: true
+    # DNS-Aufloesung (kube-dns in kube-system) erlauben
+    dns: true
+    postgres:
+      # CIDR der (Managed-)PostgreSQL-Instanz (E-45). Bei CloudNativePG im
+      # Cluster stattdessen keycloak-analog per Selektor abbilden.
+      cidr: "10.0.0.0/16"
+      port: 5432
+    keycloak:
+      # ENTWEDER cidr setzen (extern erreichbarer Keycloak) ODER cidr leer
+      # lassen und die Selektoren nutzen (In-Cluster-Deployment via Operator, E-46).
+      cidr: ""
+      namespaceSelector:
+        kubernetes.io/metadata.name: keycloak
+      podSelector:
+        app: keycloak
+      port: 8443
+
+  # Prometheus-Scrape auf /actuator/prometheus (docs/11 Abschnitt 7): bei
+  # Default-Deny muss das Monitoring explizit freigeschaltet werden.
+  monitoring:
+    enabled: false
+    namespaceSelector:
+      kubernetes.io/metadata.name: monitoring

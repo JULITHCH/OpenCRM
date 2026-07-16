@@ -10,6 +10,8 @@
     "leads": "Leads",
     "accounts": "Accounts",
     "contacts": "Contacts",
+    "opportunities": "Opportunities",
+    "products": "Products",
     "import": "Import",
     "settings": "Settings"
   },
@@ -25,6 +27,132 @@
   },
   "placeholder": {
     "body": "This page will follow in a later increment."
+  },
+  "dashboard": {
+    "heading": "Dashboard",
+    "range": {
+      "label": "Time range",
+      "last7": "Last 7 days",
+      "last30": "Last 30 days",
+      "last90": "Last 90 days"
+    },
+    "kpisLoadError": "Failed to load KPIs: {{message}}",
+    "kpi": {
+      "revenue": "Revenue",
+      "wonLost": "Won / Lost",
+      "winRate": "Win rate",
+      "avgSalesCycle": "Avg. sales cycle",
+      "daysValue": "{{value}} days",
+      "openPipeline": "Open pipeline",
+      "weightedPipeline": "Weighted pipeline",
+      "activities": "Activities"
+    },
+    "revenueChart": {
+      "title": "Revenue over time",
+      "revenue": "Revenue",
+      "loadError": "Failed to load revenue timeseries: {{message}}"
+    },
+    "funnelChart": {
+      "title": "Pipeline funnel",
+      "count": "Count",
+      "amount": "Amount",
+      "weighted": "Weighted",
+      "loadError": "Failed to load pipeline funnel: {{message}}"
+    },
+    "leaderboard": {
+      "title": "Leaderboard",
+      "user": "User",
+      "revenue": "Revenue",
+      "wonCount": "Won",
+      "empty": "No closed deals in this range.",
+      "loadError": "Failed to load leaderboard: {{message}}"
+    }
+  },
+  "notifications": {
+    "title": "Notifications",
+    "empty": "No unread notifications.",
+    "markAllRead": "Mark all as read",
+    "leadSlaBreach": "SLA breached: {{title}}",
+    "actionError": "Action failed: {{message}}"
+  },
+  "settings": {
+    "heading": "Settings",
+    "loading": "Loading settings …",
+    "adminOnly": "This page is only available to administrators.",
+    "loadError": "Failed to load settings: {{message}}",
+    "tenant": {
+      "title": "Tenant",
+      "name": "Name",
+      "plan": "Plan",
+      "currency": "Default currency"
+    },
+    "form": {
+      "title": "Policies",
+      "slaHours": "SLA (hours)",
+      "leadRetentionMonths": "Lead retention (months)",
+      "invalidNumber": "Please enter a valid number."
+    },
+    "saveSuccess": "Settings saved.",
+    "saveError": "Failed to save settings: {{message}}"
+  },
+  "products": {
+    "heading": "Products",
+    "create": "Create product",
+    "loading": "Loading products …",
+    "empty": "No products found.",
+    "loadError": "Failed to load products: {{message}}",
+    "columns": {
+      "sku": "SKU",
+      "name": "Name",
+      "category": "Category",
+      "listPrice": "List price",
+      "active": "Status"
+    },
+    "state": {
+      "active": "Active",
+      "inactive": "Inactive"
+    },
+    "rowActions": {
+      "edit": "Edit product"
+    },
+    "form": {
+      "createTitle": "Create product",
+      "editTitle": "Edit product",
+      "sku": "SKU",
+      "name": "Name",
+      "category": "Category",
+      "listPrice": "List price",
+      "active": "Active",
+      "skuRequired": "SKU is required.",
+      "nameRequired": "Name is required.",
+      "listPriceRequired": "Please enter a valid list price."
+    },
+    "createSuccess": "Product created.",
+    "createError": "Failed to create product: {{message}}",
+    "updateSuccess": "Product updated.",
+    "updateError": "Failed to update product: {{message}}"
+  },
+  "opportunities": {
+    "heading": "Opportunities",
+    "loading": "Loading opportunities …",
+    "empty": "No opportunities found.",
+    "loadError": "Failed to load opportunities: {{message}}",
+    "filter": {
+      "status": "Status",
+      "all": "All statuses"
+    },
+    "columns": {
+      "name": "Name",
+      "amount": "Amount",
+      "status": "Status",
+      "stage": "Stage",
+      "expectedCloseDate": "Expected close date"
+    },
+    "status": {
+      "OPEN": "Open",
+      "WON": "Won",
+      "LOST": "Lost"
+    }
   },
   "leads": {
     "heading": "Leads",

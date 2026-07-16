@@ -25,6 +25,15 @@ Wir verarbeiten Import/Export mit **Spring Batch**, Zustandsfuehrung ausschliess
 - Jeder Import-Job setzt den Tenant-Kontext (`SET LOCAL app.current_tenant`) aus `import_jobs.tenant_id`, RLS bleibt aktiv ([ADR-002](ADR-002-multi-tenancy-shared-schema-rls.md)).
 - Dashboard-Refresh laeuft als geplanter Job im selben Mechanismus.
 
+**Umsetzungsnotiz (M1/M2, Stand 2026-07-16):** Implementiert ist ein bewusst schlanker,
+chunk-basierter Runner direkt auf den Job-Tabellen (`ImportRunner`/`ExportRunner`,
+500er-Chunks in eigenen Transaktionen mit explizitem Tenant-Kontext, Fortschritt und
+Fehler je Chunk persistiert, Fehlerbudget 1000 Zeilen) — das Spring-Batch-Framework
+mit seinen Metadaten-Tabellen kommt erst dazu, wenn Skip-/Restart-Semantik ueber diesen
+Umfang hinauswaechst. Der Tabellen-Kontrakt (`import_jobs`/`export_jobs`, Statusmodell,
+API) ist identisch; der Wechsel bleibt ein interner Implementierungstausch.
+Wiederkehrende Jobs (MV-Refresh, SLA, DSGVO) laufen ueber ShedLock (E-43).
+
 ## Konsequenzen
 
 ### Positiv

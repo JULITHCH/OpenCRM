@@ -1,0 +1,58 @@
+OpenCRM {{ .Chart.AppVersion }} wurde als Release "{{ .Release.Name }}" in Namespace "{{ .Release.Namespace }}" installiert.
+
+{{- if .Values.ingress.enabled }}
+
+Erreichbarkeit (nach DNS-/TLS-Einrichtung):
+  Frontend:  https://{{ .Values.ingress.host }}/
+  API:       https://{{ .Values.ingress.host }}/api/v1
+{{- end }}
+
+WICHTIG — extern betriebene Komponenten (nicht Teil dieses Charts):
+
+  * PostgreSQL 16 laeuft extern. Empfohlen ist ein Managed Service mit
+    Backups/PITR (Entscheidung E-45); Fallback fuer On-Prem ist der
+    CloudNativePG-Operator. Das Chart erwartet nur das Secret
+    "{{ .Values.backend.env.dbSecretName }}" (s. u.).
+  * Keycloak laeuft extern als eigenes Deployment ueber den Keycloak-Operator
+    mit eigener PostgreSQL-Datenbank (Entscheidung E-46). Konfiguriert wird
+    hier nur die Issuer-URI: {{ .Values.backend.env.keycloakIssuerUri }}
+
+Voraussetzung — DB-Secret (extern verwaltet, z. B. External Secrets Operator):
+Das Secret "{{ .Values.backend.env.dbSecretName }}" muss im Namespace
+"{{ .Release.Namespace }}" existieren und folgende Keys enthalten:
+
+  DB_URL                 z. B. jdbc:postgresql://<host>:5432/opencrm?sslmode=verify-full
+  DB_USER                App-Rolle (opencrm_app, ohne BYPASSRLS)
+  DB_PASSWORD
+  DB_MIGRATOR_USER       Migrations-Rolle (opencrm_migrator, Schema-Owner)
+  DB_MIGRATOR_PASSWORD
+
+Nur fuer erste Tests (Produktion: External Secrets Operator, nie Klartext im Repo):
+
+  kubectl -n {{ .Release.Namespace }} create secret generic {{ .Values.backend.env.dbSecretName }} \
+    --from-literal=DB_URL='jdbc:postgresql://<host>:5432/opencrm' \
+    --from-literal=DB_USER='opencrm_app' \
+    --from-literal=DB_PASSWORD='<...>' \
+    --from-literal=DB_MIGRATOR_USER='opencrm_migrator' \
+    --from-literal=DB_MIGRATOR_PASSWORD='<...>'
+
+Datenbank-Migrationen (Flyway):
+Die Flyway-Migrationen laufen derzeit BEIM START des Backends (application.yml,
+eigene Migrator-Rolle) — es gibt bewusst keinen separaten Migrations-Job in
+diesem Geruest. TODO fuer Zero-Downtime-Setups (expand-contract, docs/11
+Abschnitt 5): Migrationen als Helm pre-install/pre-upgrade Hook-Job ausfuehren
+und den App-Start auf `flyway validate` beschraenken; Ansatzpunkt ist im
+Template backend-deployment.yaml kommentiert.
+
+Status pruefen:
+
+  kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/instance={{ .Release.Name }}
+  kubectl -n {{ .Release.Namespace }} get ingress {{ include "opencrm.fullname" . }}
+
+{{- if .Values.networkPolicies.enabled }}
+
+Hinweis NetworkPolicies (E-47): Default-Deny fuer eingehenden Traffic ist aktiv.
+Die CIDR/Selektoren fuer PostgreSQL und Keycloak (values: networkPolicies.backendEgress)
+muessen an die Zielumgebung angepasst werden, sonst erreicht das Backend seine
+Abhaengigkeiten nicht. Prometheus-Scraping ggf. via networkPolicies.monitoring freischalten.
+{{- end }}

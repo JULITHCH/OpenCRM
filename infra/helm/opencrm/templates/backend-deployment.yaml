@@ -1,0 +1,139 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "opencrm.fullname" . }}-backend
+  labels:
+    {{- include "opencrm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
+spec:
+  {{- if not .Values.backend.hpa.enabled }}
+  replicas: {{ .Values.backend.replicaCount }}
+  {{- end }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # docs/11 Abschnitt 3.1: Rolling Update ohne Kapazitaetsverlust
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      {{- include "opencrm.selectorLabels" (dict "root" $ "component" "backend") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "opencrm.labels" . | nindent 8 }}
+        app.kubernetes.io/component: backend
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        # entspricht dem User im backend/Dockerfile
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      # ----------------------------------------------------------------------
+      # Datenbank-Migrationen (Flyway):
+      # Aktuell fuehrt der Backend-Start die Flyway-Migrationen selbst aus
+      # (application.yml: spring.flyway.* mit eigener Migrator-Rolle). Fuer
+      # dieses Geruest gibt es deshalb KEINEN separaten Migrations-Job.
+      #
+      # TODO (Zero-Downtime, docs/11 Abschnitt 5): Fuer expand-contract-
+      # Deployments Flyway aus dem App-Start herausloesen und als Helm
+      # pre-install/pre-upgrade Hook-Job (Backend-Image, eigener Kommando-
+      # Einstieg mit `flyway migrate` bzw. Migrations-Profil, Rolle
+      # opencrm_migrator) ausfuehren; das Backend validiert beim Start dann
+      # nur noch (`flyway validate`). Alternativ waere hier ein initContainer
+      # moeglich — der Hook-Job ist vorzuziehen, weil er pro Rollout genau
+      # einmal laeuft statt je Replica.
+      # ----------------------------------------------------------------------
+      containers:
+        - name: backend
+          image: {{ include "opencrm.image" .Values.backend.image }}
+          imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            # DB-Zugangsdaten kommen aus einem extern verwalteten Secret
+            # (External Secrets Operator, docs/11 Abschnitt 3.2) — nie aus Values.
+            - name: DB_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.backend.env.dbSecretName }}
+                  key: DB_URL
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.backend.env.dbSecretName }}
+                  key: DB_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.backend.env.dbSecretName }}
+                  key: DB_PASSWORD
+            # Flyway laeuft mit eigener Rolle (Schema-Owner), nie mit der
+            # RLS-beschraenkten App-Rolle (docs/04-multi-tenancy.md):
+            - name: DB_MIGRATOR_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.backend.env.dbSecretName }}
+                  key: DB_MIGRATOR_USER
+            - name: DB_MIGRATOR_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.backend.env.dbSecretName }}
+                  key: DB_MIGRATOR_PASSWORD
+            - name: KEYCLOAK_ISSUER_URI
+              value: {{ .Values.backend.env.keycloakIssuerUri | quote }}
+            - name: OPENCRM_STORAGE_ROOT
+              value: {{ .Values.backend.env.storageRoot | quote }}
+            {{- with .Values.backend.env.extra }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          # JVM-Start (inkl. eingebetteter Flyway-Migrationen) kann dauern:
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            periodSeconds: 5
+            failureThreshold: 36
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            {{- toYaml .Values.backend.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: storage
+              mountPath: {{ .Values.backend.env.storageRoot }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        # TODO: Phase 1 nutzt lokalen Storage als emptyDir — Dateien sind
+        # FLUECHTIG und pro Pod isoliert. Fuer prod durch S3-kompatiblen
+        # Objekt-Storage (docs/11 Abschnitt 3.1) bzw. uebergangsweise ein
+        # PVC (ReadWriteMany) ersetzen.
+        - name: storage
+          emptyDir: {}

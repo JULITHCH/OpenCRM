@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| Status | Konzept beschlossen — Umsetzung startet (M1) |
+| Status | In Umsetzung — M1–M3-Funktionsumfang implementiert (siehe [Roadmap](docs/12-roadmap.md)) |
 | Stand | 2026-07-16 |
 | Verantwortlich | Lead Architecture |
 

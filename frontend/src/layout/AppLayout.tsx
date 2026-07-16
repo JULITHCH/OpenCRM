@@ -12,13 +12,16 @@ import Typography from '@mui/material/Typography'
 import BusinessIcon from '@mui/icons-material/Business'
 import ContactsIcon from '@mui/icons-material/Contacts'
 import DashboardIcon from '@mui/icons-material/Dashboard'
+import Inventory2Icon from '@mui/icons-material/Inventory2'
 import LogoutIcon from '@mui/icons-material/Logout'
 import PersonSearchIcon from '@mui/icons-material/PersonSearch'
 import SettingsIcon from '@mui/icons-material/Settings'
+import TrendingUpIcon from '@mui/icons-material/TrendingUp'
 import UploadFileIcon from '@mui/icons-material/UploadFile'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../auth/useAuth'
+import { NotificationBell } from '../components/NotificationBell'
 
 const drawerWidth = 240
 
@@ -27,6 +30,8 @@ const navItems = [
   { to: '/leads', labelKey: 'nav.leads', icon: <PersonSearchIcon /> },
   { to: '/accounts', labelKey: 'nav.accounts', icon: <BusinessIcon /> },
   { to: '/contacts', labelKey: 'nav.contacts', icon: <ContactsIcon /> },
+  { to: '/opportunities', labelKey: 'nav.opportunities', icon: <TrendingUpIcon /> },
+  { to: '/products', labelKey: 'nav.products', icon: <Inventory2Icon /> },
   { to: '/import', labelKey: 'nav.import', icon: <UploadFileIcon /> },
   { to: '/settings', labelKey: 'nav.settings', icon: <SettingsIcon /> },
 ] as const
@@ -43,6 +48,7 @@ export function AppLayout() {
           <Typography variant="h6" component="h1" noWrap sx={{ flexGrow: 1 }}>
             {t('app.title')}
           </Typography>
+          <NotificationBell />
           <Typography variant="body2" sx={{ mr: 2 }}>
             {displayName}
           </Typography>
