@@ -56,8 +56,23 @@ public class Lead {
     @Column(name = "owner_id")
     private UUID ownerId;
 
+    @Column
+    private Integer score;
+
+    @Column(name = "disqualified_reason")
+    private String disqualifiedReason;
+
+    @Column(name = "converted_at")
+    private OffsetDateTime convertedAt;
+
+    @Column(name = "disqualified_at")
+    private OffsetDateTime disqualifiedAt;
+
     @Column(name = "external_id")
     private String externalId;
+
+    @Column(name = "deleted_at")
+    private OffsetDateTime deletedAt;
 
     @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
     private OffsetDateTime createdAt;
@@ -97,6 +112,10 @@ public class Lead {
 
     public String getEmail() {
         return email;
+    }
+
+    public String getPhone() {
+        return phone;
     }
 
     public Source getSource() {
@@ -139,8 +158,36 @@ public class Lead {
         this.email = email;
     }
 
+    public void setPhone(String phone) {
+        this.phone = phone;
+    }
+
     public void setSource(Source source) {
         this.source = source;
+    }
+
+    public Integer getScore() {
+        return score;
+    }
+
+    public String getDisqualifiedReason() {
+        return disqualifiedReason;
+    }
+
+    public OffsetDateTime getConvertedAt() {
+        return convertedAt;
+    }
+
+    public OffsetDateTime getDisqualifiedAt() {
+        return disqualifiedAt;
+    }
+
+    public OffsetDateTime getDeletedAt() {
+        return deletedAt;
+    }
+
+    public void setScore(Integer score) {
+        this.score = score;
     }
 
     public void assignTo(UUID userId) {
@@ -148,5 +195,40 @@ public class Lead {
         if (this.status == Status.NEW) {
             this.status = Status.ASSIGNED;
         }
+    }
+
+    /** Erlaubte Statusübergänge laut Lifecycle in docs/06-lead-management.md. */
+    private static final java.util.Map<Status, java.util.Set<Status>> TRANSITIONS = java.util.Map.of(
+            Status.NEW, java.util.Set.of(Status.ASSIGNED, Status.DISQUALIFIED),
+            Status.ASSIGNED, java.util.Set.of(Status.CONTACTED, Status.DISQUALIFIED),
+            Status.CONTACTED, java.util.Set.of(Status.QUALIFIED, Status.DISQUALIFIED),
+            Status.QUALIFIED, java.util.Set.of(Status.CONVERTED, Status.DISQUALIFIED),
+            Status.DISQUALIFIED, java.util.Set.of(),
+            Status.CONVERTED, java.util.Set.of());
+
+    public void transitionTo(Status target) {
+        if (!TRANSITIONS.get(this.status).contains(target)) {
+            throw new IllegalStateException(
+                    "Statusuebergang " + this.status + " -> " + target + " ist nicht erlaubt");
+        }
+        this.status = target;
+        if (target == Status.CONVERTED) {
+            this.convertedAt = OffsetDateTime.now();
+        }
+        if (target == Status.DISQUALIFIED) {
+            this.disqualifiedAt = OffsetDateTime.now();
+        }
+    }
+
+    public void disqualify(String reason) {
+        if (reason == null || reason.isBlank()) {
+            throw new IllegalArgumentException("disqualified_reason ist bei Disqualifikation Pflicht");
+        }
+        transitionTo(Status.DISQUALIFIED);
+        this.disqualifiedReason = reason;
+    }
+
+    public void softDelete() {
+        this.deletedAt = OffsetDateTime.now();
     }
 }

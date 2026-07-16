@@ -1,0 +1,55 @@
+{
+  "app": {
+    "title": "OpenCRM",
+    "authLoading": "Checking sign-in …",
+    "authError": "Sign-in failed. Is Keycloak running (infra/docker-compose.yml)?",
+    "logout": "Sign out"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "leads": "Leads",
+    "accounts": "Accounts",
+    "contacts": "Contacts",
+    "settings": "Settings"
+  },
+  "placeholder": {
+    "body": "This page will follow in a later increment."
+  },
+  "leads": {
+    "heading": "Leads",
+    "create": "Create lead",
+    "loading": "Loading leads …",
+    "empty": "No leads yet.",
+    "unassigned": "Unassigned",
+    "loadError": "Failed to load leads: {{message}}",
+    "columns": {
+      "title": "Title",
+      "company": "Company",
+      "lastName": "Last name",
+      "email": "Email",
+      "status": "Status",
+      "owner": "Owner"
+    },
+    "status": {
+      "NEW": "New",
+      "ASSIGNED": "Assigned",
+      "CONTACTED": "Contacted",
+      "QUALIFIED": "Qualified",
+      "DISQUALIFIED": "Disqualified",
+      "CONVERTED": "Converted"
+    },
+    "form": {
+      "dialogTitle": "Create lead",
+      "title": "Title",
+      "company": "Company",
+      "lastName": "Last name",
+      "email": "Email",
+      "titleRequired": "Title is required.",
+      "companyOrLastNameRequired": "At least one of company or last name must be provided.",
+      "cancel": "Cancel",
+      "submit": "Create"
+    },
+    "createSuccess": "Lead created.",
+    "createError": "Failed to create lead: {{message}}"
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "app": {
+    "title": "OpenCRM",
+    "authLoading": "Anmeldung wird geprüft …",
+    "authError": "Anmeldung fehlgeschlagen. Läuft Keycloak (infra/docker-compose.yml)?",
+    "logout": "Abmelden"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "leads": "Leads",
+    "accounts": "Accounts",
+    "contacts": "Kontakte",
+    "settings": "Einstellungen"
+  },
+  "placeholder": {
+    "body": "Diese Seite folgt in einem späteren Inkrement."
+  },
+  "leads": {
+    "heading": "Leads",
+    "create": "Lead anlegen",
+    "loading": "Leads werden geladen …",
+    "empty": "Noch keine Leads vorhanden.",
+    "unassigned": "Nicht zugewiesen",
+    "loadError": "Leads konnten nicht geladen werden: {{message}}",
+    "columns": {
+      "title": "Titel",
+      "company": "Firma",
+      "lastName": "Nachname",
+      "email": "E-Mail",
+      "status": "Status",
+      "owner": "Verantwortlicher"
+    },
+    "status": {
+      "NEW": "Neu",
+      "ASSIGNED": "Zugewiesen",
+      "CONTACTED": "Kontaktiert",
+      "QUALIFIED": "Qualifiziert",
+      "DISQUALIFIED": "Disqualifiziert",
+      "CONVERTED": "Konvertiert"
+    },
+    "form": {
+      "dialogTitle": "Lead anlegen",
+      "title": "Titel",
+      "company": "Firma",
+      "lastName": "Nachname",
+      "email": "E-Mail",
+      "titleRequired": "Titel ist ein Pflichtfeld.",
+      "companyOrLastNameRequired": "Mindestens eines von Firma oder Nachname muss angegeben werden.",
+      "cancel": "Abbrechen",
+      "submit": "Anlegen"
+    },
+    "createSuccess": "Lead wurde angelegt.",
+    "createError": "Lead konnte nicht angelegt werden: {{message}}"
+  }
+}
