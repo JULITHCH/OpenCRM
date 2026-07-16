@@ -19,6 +19,15 @@ spring:
   mvc:
     problemdetails:
       enabled: true
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 55MB
+
+opencrm:
+  storage:
+    local:
+      root: ${OPENCRM_STORAGE_ROOT:${java.io.tmpdir}/opencrm-storage}
   security:
     oauth2:
       resourceserver:

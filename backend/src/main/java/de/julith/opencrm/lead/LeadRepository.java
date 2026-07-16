@@ -13,6 +13,10 @@ public interface LeadRepository extends JpaRepository<Lead, UUID> {
 
     Optional<Lead> findByIdAndDeletedAtIsNull(UUID id);
 
+    Optional<Lead> findByExternalIdAndDeletedAtIsNull(String externalId);
+
+    Optional<Lead> findFirstByEmailIgnoreCaseAndDeletedAtIsNullOrderByCreatedAtAsc(String email);
+
     @Query("""
             select l from Lead l
             where l.deletedAt is null

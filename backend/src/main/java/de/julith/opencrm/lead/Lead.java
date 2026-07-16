@@ -162,6 +162,10 @@ public class Lead {
         this.phone = phone;
     }
 
+    public void setExternalId(String externalId) {
+        this.externalId = externalId;
+    }
+
     public void setSource(Source source) {
         this.source = source;
     }
