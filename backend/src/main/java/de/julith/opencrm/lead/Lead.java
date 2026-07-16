@@ -71,6 +71,20 @@ public class Lead {
     @Column(name = "external_id")
     private String externalId;
 
+    /** Custom Fields (E-17): Werte zu custom_field_definitions, u. a. product_interest/region fuers Routing. */
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
+    @Column(nullable = false)
+    private java.util.Map<String, Object> custom = new java.util.HashMap<>();
+
+    @Column(name = "converted_account_id")
+    private UUID convertedAccountId;
+
+    @Column(name = "converted_contact_id")
+    private UUID convertedContactId;
+
+    @Column(name = "converted_opportunity_id")
+    private UUID convertedOpportunityId;
+
     @Column(name = "deleted_at")
     private OffsetDateTime deletedAt;
 
@@ -164,6 +178,33 @@ public class Lead {
 
     public void setExternalId(String externalId) {
         this.externalId = externalId;
+    }
+
+    public java.util.Map<String, Object> getCustom() {
+        return custom;
+    }
+
+    public void setCustom(java.util.Map<String, Object> custom) {
+        this.custom = custom != null ? custom : new java.util.HashMap<>();
+    }
+
+    public void markConverted(UUID accountId, UUID contactId, UUID opportunityId) {
+        transitionTo(Status.CONVERTED);
+        this.convertedAccountId = accountId;
+        this.convertedContactId = contactId;
+        this.convertedOpportunityId = opportunityId;
+    }
+
+    public UUID getConvertedAccountId() {
+        return convertedAccountId;
+    }
+
+    public UUID getConvertedContactId() {
+        return convertedContactId;
+    }
+
+    public UUID getConvertedOpportunityId() {
+        return convertedOpportunityId;
     }
 
     public void setSource(Source source) {

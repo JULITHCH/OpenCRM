@@ -41,6 +41,9 @@ public class Account {
     @Column(name = "owner_id")
     private UUID ownerId;
 
+    @Column(name = "price_list_id")
+    private UUID priceListId;
+
     @Column(name = "external_id")
     private String externalId;
 
@@ -140,6 +143,14 @@ public class Account {
 
     public void setOwnerId(UUID ownerId) {
         this.ownerId = ownerId;
+    }
+
+    public UUID getPriceListId() {
+        return priceListId;
+    }
+
+    public void setPriceListId(UUID priceListId) {
+        this.priceListId = priceListId;
     }
 
     public void setExternalId(String externalId) {

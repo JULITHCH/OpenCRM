@@ -2,7 +2,9 @@ package de.julith.opencrm.lead;
 
 import de.julith.opencrm.identity.User;
 import de.julith.opencrm.identity.UserRepository;
+import de.julith.opencrm.shared.audit.AuditService;
 import de.julith.opencrm.shared.tenancy.TenantContext;
+import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -14,12 +16,14 @@ public class LeadService {
     private final LeadRepository leadRepository;
     private final LeadAssignmentRepository leadAssignmentRepository;
     private final UserRepository userRepository;
+    private final AuditService auditService;
 
     public LeadService(LeadRepository leadRepository, LeadAssignmentRepository leadAssignmentRepository,
-                       UserRepository userRepository) {
+                       UserRepository userRepository, AuditService auditService) {
         this.leadRepository = leadRepository;
         this.leadAssignmentRepository = leadAssignmentRepository;
         this.userRepository = userRepository;
+        this.auditService = auditService;
     }
 
     /**
@@ -38,6 +42,8 @@ public class LeadService {
         lead.assignTo(assignee.getId());
         leadAssignmentRepository.save(new LeadAssignment(TenantContext.get(), lead.getId(), assignee.getId(),
                 actorId, LeadAssignment.Method.MANUAL));
+        auditService.record("ASSIGN", "LEAD", lead.getId(), actorId,
+                Map.of("assignedTo", assignee.getId().toString(), "method", "MANUAL"));
         return lead;
     }
 

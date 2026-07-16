@@ -1,11 +1,9 @@
 package de.julith.opencrm.importexport;
 
+import de.julith.opencrm.shared.audit.AuditService;
 import de.julith.opencrm.shared.storage.FileStorage;
 import de.julith.opencrm.shared.tenancy.TenantScopedExecutor;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.Reader;
-import java.io.UncheckedIOException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -14,9 +12,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.UUID;
-import org.apache.commons.csv.CSVFormat;
-import org.apache.commons.csv.CSVParser;
-import org.apache.commons.csv.CSVRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Async;
@@ -43,15 +38,17 @@ public class ImportRunner {
     private final ImportJobErrorRepository importJobErrorRepository;
     private final FileStorage fileStorage;
     private final TenantScopedExecutor tenantScopedExecutor;
+    private final AuditService auditService;
     private final Map<ImportJob.EntityType, EntityRowImporter> importers;
 
     public ImportRunner(ImportJobRepository importJobRepository, ImportJobErrorRepository importJobErrorRepository,
                         FileStorage fileStorage, TenantScopedExecutor tenantScopedExecutor,
-                        List<EntityRowImporter> importerList) {
+                        AuditService auditService, List<EntityRowImporter> importerList) {
         this.importJobRepository = importJobRepository;
         this.importJobErrorRepository = importJobErrorRepository;
         this.fileStorage = fileStorage;
         this.tenantScopedExecutor = tenantScopedExecutor;
+        this.auditService = auditService;
         this.importers = new java.util.EnumMap<>(ImportJob.EntityType.class);
         importerList.forEach(importer -> importers.put(importer.entityType(), importer));
     }
@@ -87,23 +84,19 @@ public class ImportRunner {
         UUID defaultOwnerId = defaultOwnerId(job);
         Charset charset = charset(job);
 
-        int total = 0;
+        List<TabularFiles.RawRow> rawRows;
+        try (var in = fileStorage.get(job.getStorageKey())) {
+            rawRows = TabularFiles.readRows(job.getFormat(), in, charset, MAX_ROWS);
+        }
+
+        int total = rawRows.size();
         int skipped = 0;
         List<MappedRow> chunk = new ArrayList<>(CHUNK_SIZE);
-        try (Reader reader = new InputStreamReader(fileStorage.get(job.getStorageKey()), charset);
-             CSVParser parser = CSVFormat.DEFAULT.builder()
-                     .setHeader().setSkipHeaderRecord(true).setTrim(true).setIgnoreEmptyLines(true)
-                     .build().parse(reader)) {
-            for (CSVRecord record : parser) {
-                total++;
-                if (total > MAX_ROWS) {
-                    throw new IllegalStateException("Zeilenlimit von " + MAX_ROWS + " ueberschritten");
-                }
-                chunk.add(new MappedRow((int) record.getRecordNumber(), mapRow(job, record)));
-                if (chunk.size() >= CHUNK_SIZE) {
-                    skipped += flushChunk(job, tenantId, importer, chunk, execute, strategy, defaultOwnerId);
-                    chunk = new ArrayList<>(CHUNK_SIZE);
-                }
+        for (TabularFiles.RawRow raw : rawRows) {
+            chunk.add(new MappedRow(raw.rowNumber(), mapRow(job, raw.values())));
+            if (chunk.size() >= CHUNK_SIZE) {
+                skipped += flushChunk(job, tenantId, importer, chunk, execute, strategy, defaultOwnerId);
+                chunk = new ArrayList<>(CHUNK_SIZE);
             }
         }
         if (!chunk.isEmpty()) {
@@ -117,6 +110,11 @@ public class ImportRunner {
                     j.getOptions().put("skippedRows", finalSkipped);
                     j.finish(finalTotal);
                     importJobRepository.save(j);
+                    if (j.getMode() == ImportJob.Mode.EXECUTE) {
+                        auditService.record("IMPORT", j.getEntityType().name(), j.getId(), j.getCreatedBy(),
+                                Map.of("totalRows", finalTotal, "errorRows", j.getErrorRows(),
+                                        "skippedRows", finalSkipped));
+                    }
                 }));
     }
 
@@ -165,11 +163,11 @@ public class ImportRunner {
         return written;
     }
 
-    private static Map<String, String> mapRow(ImportJob job, CSVRecord record) {
+    private static Map<String, String> mapRow(ImportJob job, Map<String, String> rawValues) {
         Map<String, String> mapped = new LinkedHashMap<>();
         job.getMapping().forEach((header, targetField) -> {
-            if (record.isMapped(header)) {
-                mapped.put(targetField, record.get(header));
+            if (rawValues.containsKey(header)) {
+                mapped.put(targetField, rawValues.get(header));
             }
         });
         return mapped;

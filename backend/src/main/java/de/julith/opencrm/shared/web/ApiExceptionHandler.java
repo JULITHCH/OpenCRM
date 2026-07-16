@@ -31,6 +31,14 @@ public class ApiExceptionHandler {
         return problem(HttpStatus.BAD_REQUEST, "validation_failed", e.getMessage());
     }
 
+    @ExceptionHandler(QuotaExceededException.class)
+    org.springframework.http.ResponseEntity<ProblemDetail> quotaExceeded(QuotaExceededException e) {
+        ProblemDetail problem = problem(HttpStatus.TOO_MANY_REQUESTS, "quota_exceeded", e.getMessage());
+        return org.springframework.http.ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header("Retry-After", String.valueOf(e.getRetryAfterSeconds()))
+                .body(problem);
+    }
+
     private static ProblemDetail problem(HttpStatus status, String code, String detail) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, detail);
         problem.setType(URI.create(ERROR_NS + code));

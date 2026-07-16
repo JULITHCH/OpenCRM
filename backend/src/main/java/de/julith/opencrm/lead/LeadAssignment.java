@@ -78,4 +78,8 @@ public class LeadAssignment {
     public OffsetDateTime getAssignedAt() {
         return assignedAt;
     }
+
+    public void setRuleId(UUID ruleId) {
+        this.ruleId = ruleId;
+    }
 }

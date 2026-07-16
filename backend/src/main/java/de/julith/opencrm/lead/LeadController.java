@@ -36,16 +36,28 @@ public class LeadController {
     private final LeadRepository leadRepository;
     private final LeadAssignmentRepository leadAssignmentRepository;
     private final LeadService leadService;
+    private final AssignmentEngine assignmentEngine;
+    private final LeadConversionService leadConversionService;
 
     public LeadController(LeadRepository leadRepository, LeadAssignmentRepository leadAssignmentRepository,
-                          LeadService leadService) {
+                          LeadService leadService, AssignmentEngine assignmentEngine,
+                          LeadConversionService leadConversionService) {
         this.leadRepository = leadRepository;
         this.leadAssignmentRepository = leadAssignmentRepository;
         this.leadService = leadService;
+        this.assignmentEngine = assignmentEngine;
+        this.leadConversionService = leadConversionService;
     }
 
     public record LeadCreateRequest(@NotBlank String title, String companyName, String firstName, String lastName,
-                                    String email, String phone, Lead.Source source, String externalId) {
+                                    String email, String phone, Lead.Source source, String externalId,
+                                    java.util.Map<String, Object> custom) {
+    }
+
+    public record ConvertRequest(UUID accountId, String opportunityName) {
+    }
+
+    public record ConversionResponse(LeadResponse lead, UUID accountId, UUID contactId, UUID opportunityId) {
     }
 
     public record LeadPatchRequest(String title, String companyName, String firstName, String lastName,
@@ -119,8 +131,47 @@ public class LeadController {
         if (request.source() != null) {
             lead.setSource(request.source());
         }
+        if (request.custom() != null) {
+            lead.setCustom(request.custom());
+        }
         Lead saved = leadRepository.save(lead);
+        assignmentEngine.apply(saved);
         return ResponseEntity.created(URI.create("/api/v1/leads/" + saved.getId())).body(LeadResponse.from(saved));
+    }
+
+    @PostMapping("/{id}/reapply-rules")
+    @PreAuthorize(CAN_ASSIGN)
+    @Transactional
+    public LeadResponse reapplyRules(@PathVariable UUID id) {
+        Lead lead = load(id);
+        assignmentEngine.apply(lead);
+        return LeadResponse.from(lead);
+    }
+
+    /** Bulk-Re-Run fuer alle unzugewiesenen Leads im Status NEW (E-27). */
+    @PostMapping("/reapply-rules")
+    @PreAuthorize(CAN_ASSIGN)
+    @Transactional
+    public java.util.Map<String, Integer> reapplyRulesBulk() {
+        List<Lead> candidates = leadRepository.findPage(null, Lead.Status.NEW, null,
+                org.springframework.data.domain.PageRequest.ofSize(1000));
+        int assigned = 0;
+        for (Lead lead : candidates) {
+            if (assignmentEngine.apply(lead)) {
+                assigned++;
+            }
+        }
+        return java.util.Map.of("candidates", candidates.size(), "assigned", assigned);
+    }
+
+    @PostMapping("/{id}/convert")
+    @PreAuthorize(CAN_WRITE)
+    public ConversionResponse convert(@PathVariable UUID id, @RequestBody(required = false) ConvertRequest request) {
+        var result = leadConversionService.convert(id,
+                request != null ? request.accountId() : null,
+                request != null ? request.opportunityName() : null);
+        return new ConversionResponse(LeadResponse.from(result.lead()), result.accountId(),
+                result.contactId(), result.opportunityId());
     }
 
     @PatchMapping("/{id}")

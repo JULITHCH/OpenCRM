@@ -57,14 +57,21 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
   const headers: Record<string, string> = {
     Authorization: `Bearer ${keycloak.token}`,
   }
-  if (options.body !== undefined) {
+  // FormData wird unverändert durchgereicht — den Content-Type (multipart/form-data
+  // inkl. Boundary) setzt der Browser selbst.
+  const isFormData = options.body instanceof FormData
+  if (options.body !== undefined && !isFormData) {
     headers['Content-Type'] = 'application/json'
   }
 
   const response = await fetch(`${baseUrl}${path}`, {
     method: options.method ?? 'GET',
     headers,
-    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+    body: isFormData
+      ? (options.body as FormData)
+      : options.body !== undefined
+        ? JSON.stringify(options.body)
+        : undefined,
     signal: options.signal,
   })
 

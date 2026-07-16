@@ -4,10 +4,8 @@ import de.julith.opencrm.identity.User;
 import de.julith.opencrm.identity.UserRepository;
 import de.julith.opencrm.shared.storage.FileStorage;
 import de.julith.opencrm.shared.tenancy.TenantContext;
-import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
@@ -16,8 +14,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.UUID;
-import org.apache.commons.csv.CSVFormat;
-import org.apache.commons.csv.CSVParser;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -72,16 +68,17 @@ public class ImportService {
         } catch (IOException e) {
             throw new UncheckedIOException("Upload nicht lesbar", e);
         }
-        List<String> headers = readHeaders(content);
+        String fileName = file.getOriginalFilename() != null ? file.getOriginalFilename() : "import.csv";
+        ImportJob.Format format = fileName.toLowerCase(Locale.ROOT).endsWith(".xlsx")
+                ? ImportJob.Format.XLSX : ImportJob.Format.CSV;
+        List<String> headers = readHeaders(format, content);
 
         UUID tenantId = TenantContext.get();
-        String storageKey = tenantId + "/imports/" + UUID.randomUUID() + ".csv";
+        String storageKey = tenantId + "/imports/" + UUID.randomUUID() + "." + format.name().toLowerCase(Locale.ROOT);
         fileStorage.put(storageKey, new ByteArrayInputStream(content), content.length);
 
         UUID actorId = userRepository.findByKeycloakId(actorKeycloakId).map(User::getId).orElse(null);
-        ImportJob job = new ImportJob(tenantId, entityType,
-                file.getOriginalFilename() != null ? file.getOriginalFilename() : "import.csv",
-                storageKey, ImportJob.Format.CSV, actorId);
+        ImportJob job = new ImportJob(tenantId, entityType, fileName, storageKey, format, actorId);
         job.getOptions().put("headers", headers);
         return importJobRepository.save(job);
     }
@@ -137,14 +134,11 @@ public class ImportService {
                 .orElseThrow(() -> new NoSuchElementException("Import-Job " + jobId + " nicht gefunden"));
     }
 
-    private static List<String> readHeaders(byte[] content) {
-        try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(new ByteArrayInputStream(content), StandardCharsets.UTF_8));
-             CSVParser parser = CSVFormat.DEFAULT.builder().setHeader().setSkipHeaderRecord(true).setTrim(true)
-                     .build().parse(reader)) {
-            return List.copyOf(parser.getHeaderNames());
-        } catch (IOException | IllegalArgumentException e) {
-            throw new IllegalArgumentException("CSV-Kopfzeile konnte nicht gelesen werden", e);
+    private static List<String> readHeaders(ImportJob.Format format, byte[] content) {
+        try {
+            return TabularFiles.readHeaders(format, new ByteArrayInputStream(content), StandardCharsets.UTF_8);
+        } catch (IOException | IllegalArgumentException | org.apache.poi.ooxml.POIXMLException e) {
+            throw new IllegalArgumentException("Kopfzeile konnte nicht gelesen werden: " + e.getMessage(), e);
         }
     }
 
