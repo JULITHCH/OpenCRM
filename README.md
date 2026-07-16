@@ -78,6 +78,17 @@ Alle wesentlichen Entscheidungen sind als Architecture Decision Records dokument
 | [ADR-006](docs/adr/ADR-006-import-export-mit-spring-batch.md) | Import/Export mit Spring Batch + PostgreSQL-Job-Tabellen |
 | [ADR-007](docs/adr/ADR-007-frontend-react-spa.md) | Frontend als React-SPA |
 
+## Repository-Struktur
+
+| Verzeichnis | Inhalt |
+|---|---|
+| [`backend/`](backend/README.md) | Spring-Boot-Backend (modularer Monolith, Java 21) — inkl. Flyway-Migrationen und RLS-Isolationstests |
+| [`infra/`](infra/docker-compose.yml) | Lokale Dev-Umgebung (PostgreSQL, Keycloak mit Realm-Import, MinIO) |
+| `frontend/` | React-SPA (folgt als nächstes Inkrement in M1) |
+| [`docs/`](docs/) | Konzept- und Architekturdokumentation, ADRs, Entscheidungsprotokoll |
+
+Schnellstart für Entwickler: siehe [backend/README.md](backend/README.md).
+
 ## Leseempfehlung
 
 - **Für den schnellen Überblick:** [01 Vision und Anforderungen](docs/01-vision-und-anforderungen.md) → [02 Systemarchitektur](docs/02-systemarchitektur.md) → [12 Roadmap](docs/12-roadmap.md)

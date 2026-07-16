@@ -1,0 +1,36 @@
+spring:
+  application:
+    name: opencrm-backend
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/opencrm}
+    username: ${DB_USER:opencrm_app}
+    password: ${DB_PASSWORD:opencrm_app}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:20}
+  flyway:
+    enabled: true
+    # Migrationen laufen mit eigener Rolle (Schema-Owner), nie mit der RLS-beschraenkten App-Rolle
+    user: ${DB_MIGRATOR_USER:opencrm_migrator}
+    password: ${DB_MIGRATOR_PASSWORD:opencrm_migrator}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8081/realms/opencrm}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+server:
+  port: 8080

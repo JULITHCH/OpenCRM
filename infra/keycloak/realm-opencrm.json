@@ -1,0 +1,73 @@
+{
+  "realm": "opencrm",
+  "enabled": true,
+  "displayName": "OpenCRM",
+  "registrationAllowed": false,
+  "bruteForceProtected": true,
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "roles": {
+    "realm": [
+      { "name": "platform-admin", "description": "Betreiber, mandantenuebergreifend" },
+      { "name": "tenant-admin", "description": "Mandanten-Administrator" },
+      { "name": "sales-manager", "description": "Vertriebsleitung" },
+      { "name": "sales-rep", "description": "Verkaeufer" },
+      { "name": "read-only", "description": "Reporting/Controlling" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "opencrm-web",
+      "name": "OpenCRM Web-Frontend",
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["http://localhost:5173/*"],
+      "webOrigins": ["http://localhost:5173"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:5173/*"
+      },
+      "protocolMappers": [
+        {
+          "name": "tenant_id",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "user.attribute": "tenant_id",
+            "claim.name": "tenant_id",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "opencrm-api",
+      "name": "OpenCRM Service-Client",
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "secret": "dev-only-secret"
+    }
+  ],
+  "users": [
+    {
+      "username": "dev",
+      "enabled": true,
+      "email": "dev@example.com",
+      "emailVerified": true,
+      "firstName": "Dev",
+      "lastName": "User",
+      "credentials": [{ "type": "password", "value": "dev", "temporary": false }],
+      "realmRoles": ["tenant-admin"],
+      "attributes": { "tenant_id": ["00000000-0000-0000-0000-000000000001"] }
+    }
+  ]
+}
