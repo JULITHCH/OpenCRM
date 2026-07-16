@@ -370,5 +370,8 @@
       "doneWithErrors": "Import completed — rows with errors were skipped.",
       "toLeads": "Go to leads"
     }
+  },
+  "footer": {
+    "build": "Build {{sha}}"
   }
 }

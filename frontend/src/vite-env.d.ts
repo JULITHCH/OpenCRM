@@ -10,3 +10,6 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv
 }
+
+/** Commit-Stand des Builds (vite.config.ts, define) — erscheint im Footer. */
+declare const __GIT_SHA__: string

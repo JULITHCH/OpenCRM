@@ -188,14 +188,20 @@ public class Opportunity {
         this.isEstimated = true;
     }
 
-    /** Positionssumme übernimmt: Schätzung ist damit beendet (E-14). */
+    /** Positionssumme übernimmt: Schätzung ist damit beendet (E-14). Nur bei offener Opportunity. */
     public void recalculateFromItems(BigDecimal itemSum) {
+        requireOpen();
         this.amount = itemSum;
         this.isEstimated = false;
     }
 
-    public void win(UUID wonStageId) {
+    public void win(UUID wonStageId, boolean hasItems) {
         requireOpen();
+        // docs/07 Abschnitt 5: Won verlangt einen belastbaren Betrag (Positionen oder Schätzwert)
+        if (!hasItems && !isEstimated) {
+            throw new IllegalStateException(
+                    "Won verlangt mindestens eine Position oder einen Schaetzbetrag (won-requires-amount)");
+        }
         this.status = Status.WON;
         this.stageId = wonStageId;
         this.wonAt = OffsetDateTime.now();
@@ -210,6 +216,18 @@ public class Opportunity {
         this.stageId = lostStageId;
         this.lostAt = OffsetDateTime.now();
         this.lostReason = reason;
+    }
+
+    /** Wieder öffnen (docs/07 Abschnitt 5): WON/LOST -> OPEN, Abschluss-Metadaten leeren. */
+    public void reopen(UUID openStageId) {
+        if (status == Status.OPEN) {
+            throw new IllegalStateException("Opportunity ist bereits offen");
+        }
+        this.status = Status.OPEN;
+        this.stageId = openStageId;
+        this.wonAt = null;
+        this.lostAt = null;
+        this.lostReason = null;
     }
 
     public void softDelete() {

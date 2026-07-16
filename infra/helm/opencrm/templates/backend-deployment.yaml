@@ -91,8 +91,40 @@ spec:
                   key: DB_MIGRATOR_PASSWORD
             - name: KEYCLOAK_ISSUER_URI
               value: {{ .Values.backend.env.keycloakIssuerUri | quote }}
+            {{- if .Values.backend.env.expectedAudience }}
+            - name: OPENCRM_EXPECTED_AUDIENCE
+              value: {{ .Values.backend.env.expectedAudience | quote }}
+            {{- end }}
+            # Persistente, pod-uebergreifende Ablage der Import-/Exportdateien (docs/11):
+            # S3/MinIO in Produktion — kein fluechtiger Pod-lokaler Speicher.
+            - name: OPENCRM_STORAGE_TYPE
+              value: {{ .Values.backend.storage.type | quote }}
+            {{- if eq .Values.backend.storage.type "s3" }}
+            - name: OPENCRM_S3_ENDPOINT
+              value: {{ .Values.backend.storage.s3.endpoint | quote }}
+            - name: OPENCRM_S3_REGION
+              value: {{ .Values.backend.storage.s3.region | quote }}
+            - name: OPENCRM_S3_BUCKET
+              value: {{ .Values.backend.storage.s3.bucket | quote }}
+            - name: OPENCRM_S3_PATH_STYLE
+              value: {{ .Values.backend.storage.s3.pathStyle | quote }}
+            - name: OPENCRM_S3_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.backend.storage.s3.secretName }}
+                  key: S3_ACCESS_KEY
+            - name: OPENCRM_S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.backend.storage.s3.secretName }}
+                  key: S3_SECRET_KEY
+            {{- else }}
             - name: OPENCRM_STORAGE_ROOT
               value: {{ .Values.backend.env.storageRoot | quote }}
+            {{- end }}
+            # JSON-Logs mit tenant_id/user_id/request_id (docs/11 Abschnitt 8)
+            - name: SPRING_PROFILES_ACTIVE
+              value: "json"
             {{- with .Values.backend.env.extra }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -115,6 +147,12 @@ spec:
               port: http
             periodSeconds: 10
             failureThreshold: 3
+          # Graceful Shutdown: preStop gibt dem Ingress Zeit, den Pod aus der
+          # Rotation zu nehmen, bevor der Kontext schliesst (server.shutdown=graceful)
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sleep", "10"]
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -126,14 +164,18 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            {{- if ne .Values.backend.storage.type "s3" }}
             - name: storage
               mountPath: {{ .Values.backend.env.storageRoot }}
+            {{- end }}
+      # Genug Zeit fuer Graceful Shutdown (preStop 10s + server.shutdown 20s)
+      terminationGracePeriodSeconds: 40
       volumes:
         - name: tmp
           emptyDir: {}
-        # TODO: Phase 1 nutzt lokalen Storage als emptyDir — Dateien sind
-        # FLUECHTIG und pro Pod isoliert. Fuer prod durch S3-kompatiblen
-        # Objekt-Storage (docs/11 Abschnitt 3.1) bzw. uebergangsweise ein
-        # PVC (ReadWriteMany) ersetzen.
+        {{- if ne .Values.backend.storage.type "s3" }}
+        # Nur relevant, wenn NICHT S3: lokale Ablage. In Produktion S3 verwenden
+        # (backend.storage.type=s3) — dann entfaellt dieses Volume ganz.
         - name: storage
           emptyDir: {}
+        {{- end }}

@@ -22,13 +22,14 @@
       "protocol": "openid-connect",
       "publicClient": true,
       "standardFlowEnabled": true,
-      "directAccessGrantsEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
       "serviceAccountsEnabled": false,
-      "redirectUris": ["http://localhost:5173/*"],
-      "webOrigins": ["http://localhost:5173"],
+      "redirectUris": ["${OPENCRM_WEB_REDIRECT_URIS:http://localhost:5173/*}"],
+      "webOrigins": ["${OPENCRM_WEB_ORIGINS:http://localhost:5173}"],
       "attributes": {
         "pkce.code.challenge.method": "S256",
-        "post.logout.redirect.uris": "http://localhost:5173/*"
+        "post.logout.redirect.uris": "${OPENCRM_WEB_REDIRECT_URIS:http://localhost:5173/*}"
       },
       "protocolMappers": [
         {
@@ -43,6 +44,16 @@
             "access.token.claim": "true",
             "userinfo.token.claim": "true"
           }
+        },
+        {
+          "name": "audience-opencrm-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "opencrm-api",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
         }
       ]
     },
@@ -54,7 +65,7 @@
       "standardFlowEnabled": false,
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": true,
-      "secret": "dev-only-secret"
+      "secret": "${OPENCRM_API_CLIENT_SECRET:dev-only-secret}"
     }
   ],
   "users": [

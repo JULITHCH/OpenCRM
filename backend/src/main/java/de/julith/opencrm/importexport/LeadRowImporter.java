@@ -70,7 +70,17 @@ public class LeadRowImporter implements EntityRowImporter {
         lead.setSource(resolveSource(row));
         String externalId = ImportSupport.trimToNull(row.get("externalId"));
         if (externalId != null) {
-            lead.setExternalId(externalId);
+            // Entscheidung: Bei CREATE ("immer neu anlegen") mit bereits vergebener externalId legen
+            // wir den neuen Lead OHNE externalId an. Sonst wuerde der partielle Unique-Index
+            // uq_leads_tenant_external_id (tenant_id, external_id) WHERE external_id IS NOT NULL eine
+            // DataIntegrityViolation werfen, die den kompletten Chunk killt. Bei SKIP/UPDATE ist an
+            // dieser Stelle garantiert kein Duplikat vorhanden (findDuplicate war leer), daher keine
+            // zusaetzliche Pruefung noetig.
+            boolean externalIdTaken = strategy == DuplicateStrategy.CREATE
+                    && leadRepository.findByExternalIdAndDeletedAtIsNull(externalId).isPresent();
+            if (!externalIdTaken) {
+                lead.setExternalId(externalId);
+            }
         }
         if (defaultOwnerId != null) {
             lead.assignTo(defaultOwnerId);

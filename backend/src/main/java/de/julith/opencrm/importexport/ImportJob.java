@@ -177,7 +177,16 @@ public class ImportJob {
         this.finishedAt = null;
     }
 
+    /**
+     * Compare-and-Set des Startzustands: darf nur aus PENDING heraus starten. Schuetzt gegen
+     * parallele/doppelte Laeufe desselben Jobs — ein zweiter run() findet den Job bereits in
+     * VALIDATING/RUNNING vor und bricht mit dieser Exception ab. configure() setzt vor jedem
+     * neuen Lauf zurueck auf PENDING, daher bleibt der sequentielle Neustart erlaubt.
+     */
     public void start(Status runningStatus) {
+        if (this.status != Status.PENDING) {
+            throw new IllegalStateException("Job ist nicht im Status PENDING (aktuell: " + this.status + ")");
+        }
         this.status = runningStatus;
         this.startedAt = OffsetDateTime.now();
         this.finishedAt = null;

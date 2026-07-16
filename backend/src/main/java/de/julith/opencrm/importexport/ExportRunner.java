@@ -78,26 +78,41 @@ public class ExportRunner {
     @Async("importExecutor")
     public void run(UUID jobId, UUID tenantId) {
         try {
-            tenantScopedExecutor.runAs(tenantId, () -> {
-                ExportJob job = exportJobRepository.findById(jobId)
+            // (1) Kurze Transaktion: Status RUNNING setzen und committen, damit RUNNING beobachtbar
+            //     ist und keine lange Transaktion + DB-Connection ueber den ganzen Export haengt.
+            ExportJob job = tenantScopedExecutor.callAs(tenantId, () -> {
+                ExportJob j = exportJobRepository.findById(jobId)
                         .orElseThrow(() -> new NoSuchElementException("Export-Job " + jobId + " nicht gefunden"));
-                job.start();
-                exportJobRepository.saveAndFlush(job);
+                j.start();
+                return exportJobRepository.saveAndFlush(j);
+            });
+            ImportJob.EntityType entityType = job.getEntityType();
+            ExportJob.Format format = job.getFormat();
+            UUID createdBy = job.getCreatedBy();
 
-                List<Map<String, Object>> rows = readRows(job);
-                byte[] content;
-                try {
-                    content = render(job, rows);
-                } catch (Exception e) {
-                    throw new IllegalStateException("Rendern des Exports fehlgeschlagen", e);
-                }
-                String key = tenantId + "/exports/" + job.getId() + "." + job.getFormat().name().toLowerCase();
-                fileStorage.put(key, new ByteArrayInputStream(content), content.length);
+            // (2a) Zeilen unter Tenant-Kontext + RLS in einem eigenen kurzen Aufruf lesen.
+            List<Map<String, Object>> rows = tenantScopedExecutor.callAs(tenantId, () -> readRows(entityType));
 
-                job.finish(key, rows.size());
-                exportJobRepository.save(job);
-                auditService.record("EXPORT", job.getEntityType().name(), job.getId(), job.getCreatedBy(),
-                        Map.of("rows", rows.size(), "format", job.getFormat().name()));
+            // (2b) Rendern und Storage-Put bewusst OHNE offene DB-Transaktion (kein FileStorage.put
+            //      innerhalb einer DB-Transaktion, keine lange gehaltene Connection).
+            byte[] content;
+            try {
+                content = render(entityType, format, rows);
+            } catch (Exception e) {
+                throw new IllegalStateException("Rendern des Exports fehlgeschlagen", e);
+            }
+            String key = tenantId + "/exports/" + jobId + "." + format.name().toLowerCase();
+            fileStorage.put(key, new ByteArrayInputStream(content), content.length);
+
+            int rowCount = rows.size();
+            // (3) Kurze Transaktion: finish() mit file_path/row_count, danach Audit.
+            tenantScopedExecutor.runAs(tenantId, () -> {
+                ExportJob j = exportJobRepository.findById(jobId)
+                        .orElseThrow(() -> new NoSuchElementException("Export-Job " + jobId + " nicht gefunden"));
+                j.finish(key, rowCount);
+                exportJobRepository.save(j);
+                auditService.record("EXPORT", entityType.name(), jobId, createdBy,
+                        Map.of("rows", rowCount, "format", format.name()));
             });
         } catch (Exception e) {
             log.error("Export-Job {} fehlgeschlagen", jobId, e);
@@ -109,8 +124,8 @@ public class ExportRunner {
         }
     }
 
-    private List<Map<String, Object>> readRows(ExportJob job) {
-        ExportSpec spec = SPECS.get(job.getEntityType());
+    private List<Map<String, Object>> readRows(ImportJob.EntityType entityType) {
+        ExportSpec spec = SPECS.get(entityType);
         List<String> columns = spec.columns();
         return jdbcTemplate.query(spec.sql(), (rs, rowNum) -> {
             Map<String, Object> row = new LinkedHashMap<>();
@@ -121,9 +136,10 @@ public class ExportRunner {
         });
     }
 
-    private byte[] render(ExportJob job, List<Map<String, Object>> rows) throws Exception {
-        List<String> columns = SPECS.get(job.getEntityType()).columns();
-        return switch (job.getFormat()) {
+    private byte[] render(ImportJob.EntityType entityType, ExportJob.Format format,
+                          List<Map<String, Object>> rows) throws Exception {
+        List<String> columns = SPECS.get(entityType).columns();
+        return switch (format) {
             case CSV -> renderCsv(columns, rows);
             case XLSX -> renderXlsx(columns, rows);
             case JSON -> objectMapper.writerWithDefaultPrettyPrinter()

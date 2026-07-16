@@ -58,10 +58,25 @@ public class GdprController {
                         "createdAt", row.get("created_at").toString()))
                 .toList();
 
+        // Leads derselben Person (Match ueber E-Mail); RLS grenzt automatisch auf den Tenant ein.
+        List<Map<String, Object>> leads = contact.getEmail() == null ? List.of()
+                : jdbcTemplate.queryForList("""
+                        SELECT title, company_name, status, created_at FROM leads
+                        WHERE lower(email) = lower(?) AND deleted_at IS NULL
+                        ORDER BY created_at
+                        """, contact.getEmail()).stream()
+                        .map(row -> Map.<String, Object>of(
+                                "title", row.get("title") != null ? row.get("title") : "",
+                                "companyName", row.get("company_name") != null ? row.get("company_name") : "",
+                                "status", row.get("status"),
+                                "createdAt", row.get("created_at").toString()))
+                        .toList();
+
         return Map.of(
                 "exportedAt", java.time.OffsetDateTime.now().toString(),
                 "contact", person,
                 "account", accountName != null ? Map.of("name", accountName) : Map.of(),
-                "activities", activities);
+                "activities", activities,
+                "leads", leads);
     }
 }

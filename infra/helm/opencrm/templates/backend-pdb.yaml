@@ -1,0 +1,16 @@
+{{- if .Values.backend.pdb.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "opencrm.fullname" . }}-backend
+  labels:
+    {{- include "opencrm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
+spec:
+  # docs/11 Abschnitt 3.1: mindestens ein Backend-Pod bleibt bei freiwilligen
+  # Disruptions (Node-Drain, Rollout) verfuegbar.
+  minAvailable: {{ .Values.backend.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "opencrm.selectorLabels" (dict "root" $ "component" "backend") | nindent 6 }}
+{{- end }}

@@ -23,12 +23,13 @@ cd ../backend && mvn spring-boot:run
 
 Login-Daten für die Dev-Umgebung: Keycloak-Admin `admin`/`admin` (http://localhost:8081), Realm-Nutzer `dev`/`dev` (Rolle `tenant-admin`, Tenant `00000000-…-01`).
 
-Token für API-Tests holen (Direct Access Grant ist im Dev-Realm aktiviert):
+Token für API-Tests: Der Direct Access Grant ist aus Sicherheitsgründen deaktiviert
+(nur Authorization Code + PKCE). Ein Token wird über den Frontend-Login (`dev`/`dev`)
+geholt und aus den Browser-DevTools kopiert. Für schnelles Endpoint-Testing kann der
+Grant in der Keycloak-Admin-Konsole am Client `opencrm-web` temporär aktiviert werden
+(siehe [infra/keycloak/README.md](../infra/keycloak/README.md)) — niemals in Produktion:
 
 ```bash
-TOKEN=$(curl -s http://localhost:8081/realms/opencrm/protocol/openid-connect/token \
-  -d grant_type=password -d client_id=opencrm-web -d username=dev -d password=dev \
-  | python3 -c "import json,sys; print(json.load(sys.stdin)['access_token'])")
 curl -s http://localhost:8080/api/v1/leads -H "Authorization: Bearer $TOKEN"
 ```
 

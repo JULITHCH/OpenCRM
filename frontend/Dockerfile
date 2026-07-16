@@ -12,10 +12,13 @@ ARG VITE_API_BASE_URL=/api/v1
 ARG VITE_KEYCLOAK_URL=https://auth.opencrm.example
 ARG VITE_KEYCLOAK_REALM=opencrm
 ARG VITE_KEYCLOAK_CLIENT_ID=opencrm-web
+# Commit-Stand fuer den Footer (im Image gibt es kein .git): --build-arg VITE_GIT_SHA=$(git rev-parse --short=10 HEAD)
+ARG VITE_GIT_SHA=unknown
 ENV VITE_API_BASE_URL=${VITE_API_BASE_URL} \
     VITE_KEYCLOAK_URL=${VITE_KEYCLOAK_URL} \
     VITE_KEYCLOAK_REALM=${VITE_KEYCLOAK_REALM} \
-    VITE_KEYCLOAK_CLIENT_ID=${VITE_KEYCLOAK_CLIENT_ID}
+    VITE_KEYCLOAK_CLIENT_ID=${VITE_KEYCLOAK_CLIENT_ID} \
+    VITE_GIT_SHA=${VITE_GIT_SHA}
 
 COPY package.json package-lock.json ./
 RUN npm ci

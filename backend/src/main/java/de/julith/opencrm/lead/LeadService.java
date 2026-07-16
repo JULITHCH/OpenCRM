@@ -3,6 +3,7 @@ package de.julith.opencrm.lead;
 import de.julith.opencrm.identity.User;
 import de.julith.opencrm.identity.UserRepository;
 import de.julith.opencrm.shared.audit.AuditService;
+import de.julith.opencrm.shared.security.AccessGuard;
 import de.julith.opencrm.shared.tenancy.TenantContext;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -17,13 +18,15 @@ public class LeadService {
     private final LeadAssignmentRepository leadAssignmentRepository;
     private final UserRepository userRepository;
     private final AuditService auditService;
+    private final AccessGuard accessGuard;
 
     public LeadService(LeadRepository leadRepository, LeadAssignmentRepository leadAssignmentRepository,
-                       UserRepository userRepository, AuditService auditService) {
+                       UserRepository userRepository, AuditService auditService, AccessGuard accessGuard) {
         this.leadRepository = leadRepository;
         this.leadAssignmentRepository = leadAssignmentRepository;
         this.userRepository = userRepository;
         this.auditService = auditService;
+        this.accessGuard = accessGuard;
     }
 
     /**
@@ -49,27 +52,42 @@ public class LeadService {
 
     @Transactional
     public Lead markContacted(UUID leadId) {
-        Lead lead = load(leadId);
+        Lead lead = loadOwned(leadId);
         lead.transitionTo(Lead.Status.CONTACTED);
         return lead;
     }
 
     @Transactional
     public Lead qualify(UUID leadId) {
-        Lead lead = load(leadId);
+        Lead lead = loadOwned(leadId);
         lead.transitionTo(Lead.Status.QUALIFIED);
         return lead;
     }
 
     @Transactional
     public Lead disqualify(UUID leadId, String reason) {
-        Lead lead = load(leadId);
+        Lead lead = loadOwned(leadId);
         lead.disqualify(reason);
         return lead;
     }
 
-    private Lead load(UUID leadId) {
+    /** Reaktivierung DISQUALIFIED -> NEW (docs/06 Abschnitt 2); Rollenschutz im Controller. */
+    @Transactional
+    public Lead reactivate(UUID leadId) {
+        Lead lead = load(leadId);
+        lead.reactivate();
+        return lead;
+    }
+
+    Lead load(UUID leadId) {
         return leadRepository.findByIdAndDeletedAtIsNull(leadId)
                 .orElseThrow(() -> new NoSuchElementException("Lead " + leadId + " nicht gefunden"));
+    }
+
+    /** Wie load(), erzwingt aber den Owner-Scope für beschränkte Aufrufer (sales-rep). */
+    Lead loadOwned(UUID leadId) {
+        Lead lead = load(leadId);
+        accessGuard.requireCanMutate(lead.getOwnerId());
+        return lead;
     }
 }

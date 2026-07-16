@@ -235,20 +235,28 @@ public class Lead {
         this.score = score;
     }
 
+    /**
+     * Zuweisung an einen Verkäufer (docs/06 Abschnitt 3): setzt owner_id, Statuswechsel NEW -> ASSIGNED.
+     * Terminale Leads (DISQUALIFIED/CONVERTED) sind nicht zuweisbar.
+     */
     public void assignTo(UUID userId) {
+        if (this.status == Status.DISQUALIFIED || this.status == Status.CONVERTED) {
+            throw new IllegalStateException(
+                    "Lead im Status " + this.status + " kann nicht zugewiesen werden");
+        }
         this.ownerId = userId;
         if (this.status == Status.NEW) {
             this.status = Status.ASSIGNED;
         }
     }
 
-    /** Erlaubte Statusübergänge laut Lifecycle in docs/06-lead-management.md. */
+    /** Erlaubte Statusübergänge laut Lifecycle in docs/06-lead-management.md (inkl. Reaktivierung). */
     private static final java.util.Map<Status, java.util.Set<Status>> TRANSITIONS = java.util.Map.of(
             Status.NEW, java.util.Set.of(Status.ASSIGNED, Status.DISQUALIFIED),
             Status.ASSIGNED, java.util.Set.of(Status.CONTACTED, Status.DISQUALIFIED),
             Status.CONTACTED, java.util.Set.of(Status.QUALIFIED, Status.DISQUALIFIED),
             Status.QUALIFIED, java.util.Set.of(Status.CONVERTED, Status.DISQUALIFIED),
-            Status.DISQUALIFIED, java.util.Set.of(),
+            Status.DISQUALIFIED, java.util.Set.of(Status.NEW),
             Status.CONVERTED, java.util.Set.of());
 
     public void transitionTo(Status target) {
@@ -271,6 +279,13 @@ public class Lead {
         }
         transitionTo(Status.DISQUALIFIED);
         this.disqualifiedReason = reason;
+    }
+
+    /** Reaktivierung eines disqualifizierten Leads (docs/06 Abschnitt 2): zurück auf NEW, Felder leeren. */
+    public void reactivate() {
+        transitionTo(Status.NEW);
+        this.disqualifiedReason = null;
+        this.disqualifiedAt = null;
     }
 
     public void softDelete() {

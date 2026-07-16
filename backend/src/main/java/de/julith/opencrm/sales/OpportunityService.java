@@ -23,6 +23,7 @@ public class OpportunityService {
     private final AccountRepository accountRepository;
     private final PricingService pricingService;
     private final TenantInfoReader tenantInfoReader;
+    private final de.julith.opencrm.shared.security.AccessGuard accessGuard;
 
     public OpportunityService(OpportunityRepository opportunityRepository,
                               OpportunityItemRepository opportunityItemRepository,
@@ -31,7 +32,8 @@ public class OpportunityService {
                               ProductRepository productRepository,
                               AccountRepository accountRepository,
                               PricingService pricingService,
-                              TenantInfoReader tenantInfoReader) {
+                              TenantInfoReader tenantInfoReader,
+                              de.julith.opencrm.shared.security.AccessGuard accessGuard) {
         this.opportunityRepository = opportunityRepository;
         this.opportunityItemRepository = opportunityItemRepository;
         this.pipelineRepository = pipelineRepository;
@@ -40,6 +42,7 @@ public class OpportunityService {
         this.accountRepository = accountRepository;
         this.pricingService = pricingService;
         this.tenantInfoReader = tenantInfoReader;
+        this.accessGuard = accessGuard;
     }
 
     @Transactional
@@ -69,7 +72,7 @@ public class OpportunityService {
     @Transactional
     public OpportunityItem addItem(UUID opportunityId, UUID productId, BigDecimal quantity,
                                    BigDecimal unitPriceOverride, BigDecimal discountPct) {
-        Opportunity opportunity = load(opportunityId);
+        Opportunity opportunity = loadOwned(opportunityId);
         Product product = productRepository.findByIdAndDeletedAtIsNull(productId)
                 .filter(Product::isActive)
                 .orElseThrow(() -> new NoSuchElementException("Produkt " + productId + " nicht gefunden oder inaktiv"));
@@ -91,7 +94,7 @@ public class OpportunityService {
     @Transactional
     public OpportunityItem updateItem(UUID opportunityId, UUID itemId, BigDecimal quantity,
                                       BigDecimal unitPrice, BigDecimal discountPct) {
-        Opportunity opportunity = load(opportunityId);
+        Opportunity opportunity = loadOwned(opportunityId);
         OpportunityItem item = opportunityItemRepository.findByIdAndOpportunityId(itemId, opportunityId)
                 .orElseThrow(() -> new NoSuchElementException("Position " + itemId + " nicht gefunden"));
         item.update(quantity, unitPrice, discountPct);
@@ -101,7 +104,7 @@ public class OpportunityService {
 
     @Transactional
     public void removeItem(UUID opportunityId, UUID itemId) {
-        Opportunity opportunity = load(opportunityId);
+        Opportunity opportunity = loadOwned(opportunityId);
         OpportunityItem item = opportunityItemRepository.findByIdAndOpportunityId(itemId, opportunityId)
                 .orElseThrow(() -> new NoSuchElementException("Position " + itemId + " nicht gefunden"));
         opportunityItemRepository.delete(item);
@@ -111,7 +114,7 @@ public class OpportunityService {
 
     @Transactional
     public Opportunity estimate(UUID opportunityId, BigDecimal amount) {
-        Opportunity opportunity = load(opportunityId);
+        Opportunity opportunity = loadOwned(opportunityId);
         if (!opportunityItemRepository.findByOpportunityIdOrderByPosition(opportunityId).isEmpty()) {
             throw new IllegalStateException(
                     "Schaetzbetrag ist nur ohne Positionen erlaubt (E-14); amount wird aus Positionen berechnet");
@@ -122,21 +125,33 @@ public class OpportunityService {
 
     @Transactional
     public Opportunity win(UUID opportunityId) {
-        Opportunity opportunity = load(opportunityId);
-        opportunity.win(stageFlagged(opportunity.getPipelineId(), true, false).getId());
+        Opportunity opportunity = loadOwned(opportunityId);
+        boolean hasItems = !opportunityItemRepository.findByOpportunityIdOrderByPosition(opportunityId).isEmpty();
+        opportunity.win(stageFlagged(opportunity.getPipelineId(), true, false).getId(), hasItems);
         return opportunity;
     }
 
     @Transactional
     public Opportunity lose(UUID opportunityId, String reason) {
-        Opportunity opportunity = load(opportunityId);
+        Opportunity opportunity = loadOwned(opportunityId);
         opportunity.lose(stageFlagged(opportunity.getPipelineId(), false, true).getId(), reason);
+        return opportunity;
+    }
+
+    /** Reopen (docs/07 Abschnitt 5): zurück in die erste offene Stage. Rollenschutz im Controller. */
+    @Transactional
+    public Opportunity reopen(UUID opportunityId) {
+        Opportunity opportunity = loadOwned(opportunityId);
+        PipelineStage firstOpen = pipelineStageRepository.findByPipelineIdOrderBySortOrder(opportunity.getPipelineId())
+                .stream().filter(s -> !s.isWon() && !s.isLost()).findFirst()
+                .orElseThrow(() -> new IllegalStateException("Pipeline hat keine offene Stage"));
+        opportunity.reopen(firstOpen.getId());
         return opportunity;
     }
 
     @Transactional
     public Opportunity moveToStage(UUID opportunityId, UUID stageId) {
-        Opportunity opportunity = load(opportunityId);
+        Opportunity opportunity = loadOwned(opportunityId);
         PipelineStage stage = pipelineStageRepository.findById(stageId)
                 .filter(s -> s.getPipelineId().equals(opportunity.getPipelineId()))
                 .orElseThrow(() -> new NoSuchElementException(
@@ -158,6 +173,13 @@ public class OpportunityService {
     private Opportunity load(UUID id) {
         return opportunityRepository.findByIdAndDeletedAtIsNull(id)
                 .orElseThrow(() -> new NoSuchElementException("Opportunity " + id + " nicht gefunden"));
+    }
+
+    /** Wie load(), erzwingt aber den Owner-Scope für beschränkte Aufrufer (sales-rep). */
+    private Opportunity loadOwned(UUID id) {
+        Opportunity opportunity = load(id);
+        accessGuard.requireCanMutate(opportunity.getOwnerId());
+        return opportunity;
     }
 
     private PipelineStage stageFlagged(UUID pipelineId, boolean won, boolean lost) {

@@ -15,6 +15,9 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
 
     Optional<Product> findBySkuAndDeletedAtIsNull(String sku);
 
+    /** Auch soft-gelöschte Treffer: der DB-Constraint UNIQUE(tenant_id, sku) ignoriert deleted_at. */
+    Optional<Product> findBySku(String sku);
+
     Optional<Product> findByExternalIdAndDeletedAtIsNull(String externalId);
 
     @Query("""

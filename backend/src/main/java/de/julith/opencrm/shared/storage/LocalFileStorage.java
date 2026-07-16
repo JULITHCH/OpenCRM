@@ -7,13 +7,16 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 /**
- * Dateisystem-Ablage unter einem konfigurierbaren Wurzelverzeichnis.
- * Schlüssel werden gegen Path-Traversal normalisiert.
+ * Dateisystem-Ablage unter einem konfigurierbaren Wurzelverzeichnis (Default für Dev/Test).
+ * Schlüssel werden gegen Path-Traversal normalisiert. In Produktion wird S3/MinIO verwendet
+ * (opencrm.storage.type=s3), da Pod-lokaler Speicher bei Neustart/Skalierung verloren geht.
  */
 @Component
+@ConditionalOnProperty(name = "opencrm.storage.type", havingValue = "local", matchIfMissing = true)
 public class LocalFileStorage implements FileStorage {
 
     private final Path root;

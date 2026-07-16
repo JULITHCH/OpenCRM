@@ -12,9 +12,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.UUID;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Async;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
@@ -39,30 +42,50 @@ public class ImportRunner {
     private final FileStorage fileStorage;
     private final TenantScopedExecutor tenantScopedExecutor;
     private final AuditService auditService;
+    private final JdbcTemplate jdbcTemplate;
     private final Map<ImportJob.EntityType, EntityRowImporter> importers;
 
     public ImportRunner(ImportJobRepository importJobRepository, ImportJobErrorRepository importJobErrorRepository,
                         FileStorage fileStorage, TenantScopedExecutor tenantScopedExecutor,
-                        AuditService auditService, List<EntityRowImporter> importerList) {
+                        AuditService auditService, JdbcTemplate jdbcTemplate,
+                        List<EntityRowImporter> importerList) {
         this.importJobRepository = importJobRepository;
         this.importJobErrorRepository = importJobErrorRepository;
         this.fileStorage = fileStorage;
         this.tenantScopedExecutor = tenantScopedExecutor;
         this.auditService = auditService;
+        this.jdbcTemplate = jdbcTemplate;
         this.importers = new java.util.EnumMap<>(ImportJob.EntityType.class);
         importerList.forEach(importer -> importers.put(importer.entityType(), importer));
     }
 
     @Async("importExecutor")
     public void run(UUID jobId, UUID tenantId) {
+        ImportJob job;
         try {
-            ImportJob job = tenantScopedExecutor.callAs(tenantId, () -> {
+            // Start-Block (Status-Uebergang PENDING->VALIDATING/RUNNING) in eigener Transaktion.
+            // start() macht ein Compare-and-Set auf PENDING; ein zweiter paralleler run() fuer
+            // denselben Job schlaegt hier fehl und darf den bereits laufenden Lauf NICHT beruehren.
+            job = tenantScopedExecutor.callAs(tenantId, () -> {
                 ImportJob j = importJobRepository.findById(jobId)
                         .orElseThrow(() -> new NoSuchElementException("Import-Job " + jobId + " nicht gefunden"));
+                try {
+                    j.start(j.getMode() == ImportJob.Mode.DRY_RUN
+                            ? ImportJob.Status.VALIDATING : ImportJob.Status.RUNNING);
+                } catch (IllegalStateException e) {
+                    throw new ConcurrentStartException(e.getMessage());
+                }
+                // Fehlerzeilen des vorigen Laufs erst NACH erfolgreichem CAS loeschen, damit ein
+                // parallel bereits laufender Lauf seine Fehler behaelt.
                 importJobErrorRepository.deleteByImportJobId(jobId);
-                j.start(j.getMode() == ImportJob.Mode.DRY_RUN ? ImportJob.Status.VALIDATING : ImportJob.Status.RUNNING);
                 return importJobRepository.save(j);
             });
+        } catch (ConcurrentStartException e) {
+            // Paralleler/doppelter Start: der bereits laufende Job bleibt unangetastet (kein fail()).
+            log.warn("Import-Job {} laeuft bereits, paralleler Start wird ignoriert: {}", jobId, e.getMessage());
+            return;
+        }
+        try {
             process(job, tenantId);
         } catch (Exception e) {
             log.error("Import-Job {} fehlgeschlagen", jobId, e);
@@ -71,6 +94,37 @@ public class ImportRunner {
                         j.fail();
                         importJobRepository.save(j);
                     }));
+        }
+    }
+
+    /**
+     * Recovery verwaister Laeufe: stuerzt eine Instanz mitten im Import ab, bleibt der Job fuer
+     * immer in VALIDATING/RUNNING. Dieser Job setzt Laeufe, die seit &gt; 30 Minuten haengen, auf
+     * FAILED. Iteration ueber alle aktiven Tenants unter RLS; die Isolation je Tenant uebernimmt
+     * die tenant_isolation-Policy auf import_jobs.
+     */
+    @Scheduled(fixedDelayString = "PT10M")
+    @SchedulerLock(name = "import_job_recovery", lockAtMostFor = "5m")
+    public void recoverStuckJobs() {
+        List<UUID> tenants = jdbcTemplate.query("SELECT id FROM tenants WHERE status = 'ACTIVE'",
+                (rs, rowNum) -> rs.getObject(1, UUID.class));
+        for (UUID tenantId : tenants) {
+            try {
+                tenantScopedExecutor.runAs(tenantId, () -> {
+                    int recovered = jdbcTemplate.update("""
+                            UPDATE import_jobs
+                               SET status = 'FAILED', finished_at = now()
+                             WHERE status IN ('VALIDATING', 'RUNNING')
+                               AND started_at < now() - interval '30 min'
+                            """);
+                    if (recovered > 0) {
+                        log.warn("Recovery: {} verwaiste Import-Jobs fuer Tenant {} auf FAILED gesetzt",
+                                recovered, tenantId);
+                    }
+                });
+            } catch (Exception e) {
+                log.error("Recovery verwaister Import-Jobs fuer Tenant {} fehlgeschlagen", tenantId, e);
+            }
         }
     }
 
@@ -193,5 +247,16 @@ public class ImportRunner {
     }
 
     private record MappedRow(int rowNumber, Map<String, String> values) {
+    }
+
+    /**
+     * Signalisiert, dass der Start-Block (Status-CAS) fehlgeschlagen ist, weil der Job nicht mehr
+     * PENDING war (paralleler/doppelter Lauf). Wird in run() gesondert behandelt, damit der bereits
+     * laufende Job NICHT auf FAILED gesetzt wird.
+     */
+    private static final class ConcurrentStartException extends RuntimeException {
+        ConcurrentStartException(String message) {
+            super(message);
+        }
     }
 }

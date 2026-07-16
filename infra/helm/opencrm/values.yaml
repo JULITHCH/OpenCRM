@@ -34,16 +34,28 @@ backend:
     # Issuer-URI des Keycloak-Realms (iss-Validierung + JWKS-Discovery);
     # Platzhalter-Domain bis zur Domain-Entscheidung (E-23/E-53)
     keycloakIssuerUri: "https://auth.opencrm.example/realms/opencrm"
+    # Erwartete Audience im Access Token (docs/05 Abschnitt 3.2); leer = keine aud-Pruefung
+    expectedAudience: "opencrm-api"
     # Name eines EXTERN verwalteten Secrets (External Secrets Operator) mit den Keys:
     #   DB_URL, DB_USER, DB_PASSWORD, DB_MIGRATOR_USER, DB_MIGRATOR_PASSWORD
     # (App-Rolle ohne BYPASSRLS, Migrator-Rolle fuer Flyway — docs/04, docs/11 Abschnitt 5)
     dbSecretName: "opencrm-db"
-    # Ablagepfad fuer Import-/Export-Dateien (Phase 1: emptyDir, s. Deployment-TODO)
+    # Ablagepfad — nur relevant, wenn storage.type != s3
     storageRoot: "/var/opencrm/storage"
     # Zusaetzliche Env-Eintraege (Liste von name/value bzw. name/valueFrom)
     extra: []
-    #  - name: SPRING_PROFILES_ACTIVE
-    #    value: prod
+
+  # Persistente Ablage der Import-/Exportdateien (docs/11): in Produktion S3/MinIO,
+  # damit Dateien Pod-Neustart und Skalierung ueberleben (kein fluechtiger emptyDir).
+  storage:
+    type: "s3"   # s3 (Produktion) | local (nur Einzel-Pod/Dev)
+    s3:
+      endpoint: ""            # leer = AWS S3; fuer MinIO die Service-URL setzen
+      region: "eu-central-1"
+      bucket: "opencrm"
+      pathStyle: "true"       # true fuer MinIO, false fuer AWS S3
+      # Secret mit den Keys S3_ACCESS_KEY und S3_SECRET_KEY (External Secrets)
+      secretName: "opencrm-s3"
 
   resources:
     requests:
@@ -58,6 +70,10 @@ backend:
     minReplicas: 2
     maxReplicas: 6
     targetCPUUtilizationPercentage: 70
+
+  pdb:
+    enabled: true
+    minAvailable: 1
 
   service:
     port: 8080

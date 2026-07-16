@@ -22,6 +22,7 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../auth/useAuth'
 import { NotificationBell } from '../components/NotificationBell'
+import { AppFooter } from './AppFooter'
 
 const drawerWidth = 240
 
@@ -85,9 +86,15 @@ export function AppLayout() {
           </List>
         </Box>
       </Drawer>
-      <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
+      <Box
+        component="main"
+        sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', minHeight: '100vh' }}
+      >
         <Toolbar />
-        <Outlet />
+        <Box sx={{ flexGrow: 1, p: 3 }}>
+          <Outlet />
+        </Box>
+        <AppFooter />
       </Box>
     </Box>
   )

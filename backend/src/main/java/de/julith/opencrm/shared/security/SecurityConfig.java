@@ -1,5 +1,6 @@
 package de.julith.opencrm.shared.security;
 
+import de.julith.opencrm.shared.web.RateLimitFilter;
 import de.julith.opencrm.shared.web.TenantContextFilter;
 import java.util.Collection;
 import java.util.List;
@@ -24,15 +25,21 @@ import org.springframework.security.web.authentication.www.BasicAuthenticationFi
 public class SecurityConfig {
 
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http, TenantContextFilter tenantContextFilter) throws Exception {
+    SecurityFilterChain securityFilterChain(HttpSecurity http, TenantContextFilter tenantContextFilter,
+                                            RateLimitFilter rateLimitFilter,
+                                            SecurityProblemHandlers problemHandlers) throws Exception {
         http
             .csrf(csrf -> csrf.disable())
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/actuator/health/**", "/actuator/info").permitAll()
+                .requestMatchers("/actuator/health/**", "/actuator/info", "/actuator/prometheus").permitAll()
                 .anyRequest().authenticated())
             .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())))
-            .addFilterAfter(tenantContextFilter, BasicAuthenticationFilter.class);
+            .exceptionHandling(ex -> ex
+                .authenticationEntryPoint(problemHandlers)
+                .accessDeniedHandler(problemHandlers))
+            .addFilterAfter(tenantContextFilter, BasicAuthenticationFilter.class)
+            .addFilterAfter(rateLimitFilter, TenantContextFilter.class);
         return http.build();
     }
 

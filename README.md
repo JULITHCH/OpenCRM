@@ -63,6 +63,7 @@ flowchart LR
 | 11 | [Deployment und Betrieb](docs/11-deployment-und-betrieb.md) | Umgebungen, Docker Compose, Kubernetes, CI/CD, Backup/DR, Monitoring, DSGVO |
 | 12 | [Roadmap](docs/12-roadmap.md) | Meilensteine M1–M3, Abhängigkeiten, Risiken, Ausbaustufen |
 | 13 | [Entscheidungsprotokoll](docs/13-entscheidungen.md) | Auflösung aller offenen Punkte: Produkt- und Architekturentscheidungen (E-01 ff.) |
+| 14 | [Release-Readiness](docs/14-release-readiness.md) | Ergebnis des Multi-Lens-Reviews: behobene und bewusst zurückgestellte Findings |
 
 ### Architekturentscheidungen (ADRs)
 

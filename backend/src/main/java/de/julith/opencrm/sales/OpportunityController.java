@@ -35,13 +35,16 @@ public class OpportunityController {
     private final OpportunityRepository opportunityRepository;
     private final OpportunityItemRepository opportunityItemRepository;
     private final OpportunityService opportunityService;
+    private final de.julith.opencrm.shared.security.AccessGuard accessGuard;
 
     public OpportunityController(OpportunityRepository opportunityRepository,
                                  OpportunityItemRepository opportunityItemRepository,
-                                 OpportunityService opportunityService) {
+                                 OpportunityService opportunityService,
+                                 de.julith.opencrm.shared.security.AccessGuard accessGuard) {
         this.opportunityRepository = opportunityRepository;
         this.opportunityItemRepository = opportunityItemRepository;
         this.opportunityService = opportunityService;
+        this.accessGuard = accessGuard;
     }
 
     public record OpportunityCreateRequest(@NotNull UUID accountId, @NotBlank String name, UUID pipelineId,
@@ -129,6 +132,7 @@ public class OpportunityController {
     @Transactional
     public OpportunityResponse patch(@PathVariable UUID id, @RequestBody OpportunityPatchRequest request) {
         Opportunity opportunity = load(id);
+        accessGuard.requireCanMutate(opportunity.getOwnerId());
         if (request.name() != null) {
             opportunity.setName(request.name());
         }
@@ -160,6 +164,12 @@ public class OpportunityController {
     @PreAuthorize(CAN_WRITE)
     public OpportunityResponse lost(@PathVariable UUID id, @Valid @RequestBody LoseRequest request) {
         return OpportunityResponse.from(opportunityService.lose(id, request.reason()));
+    }
+
+    @PostMapping("/{id}/reopen")
+    @PreAuthorize("hasAnyRole('tenant-admin', 'sales-manager')")
+    public OpportunityResponse reopen(@PathVariable UUID id) {
+        return OpportunityResponse.from(opportunityService.reopen(id));
     }
 
     @GetMapping("/{id}/items")

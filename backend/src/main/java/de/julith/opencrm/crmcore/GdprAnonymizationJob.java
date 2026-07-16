@@ -57,6 +57,8 @@ public class GdprAnonymizationJob {
                 tenantInfoReader.settingOrDefault("lead_retention_months", "12"));
         int contactDeletionDays = Integer.parseInt(
                 tenantInfoReader.settingOrDefault("contact_deletion_days", "30"));
+        int auditRetentionMonths = Integer.parseInt(
+                tenantInfoReader.settingOrDefault("audit_retention_months", "24"));
 
         int leads = jdbcTemplate.update("""
                 UPDATE leads SET
@@ -75,10 +77,41 @@ public class GdprAnonymizationJob {
                   AND (email IS NOT NULL OR first_name IS NOT NULL OR phone IS NOT NULL)
                 """, contactDeletionDays);
 
-        if (leads > 0 || contacts > 0) {
+        // Aktivitaeten anonymisierter Leads/Kontakte tragen PII in subject/body — mitziehen.
+        int activities = jdbcTemplate.update("""
+                UPDATE activities SET subject = '[anonymisiert]', body = NULL
+                WHERE (
+                        lead_id IN (
+                            SELECT id FROM leads
+                            WHERE status = 'DISQUALIFIED'
+                              AND disqualified_at < now() - make_interval(months => ?)
+                        )
+                     OR contact_id IN (
+                            SELECT id FROM contacts
+                            WHERE deleted_at IS NOT NULL
+                              AND deleted_at < now() - make_interval(days => ?)
+                        )
+                      )
+                  AND (subject <> '[anonymisiert]' OR body IS NOT NULL)
+                """, leadRetentionMonths, contactDeletionDays);
+
+        // Fehlerzeilen alter Import-Laeufe enthalten Roh-PII der importierten Personen.
+        int purgedImportErrorRows = jdbcTemplate.update("""
+                UPDATE import_job_errors SET raw_row = NULL
+                WHERE raw_row IS NOT NULL
+                  AND import_job_id IN (
+                      SELECT id FROM import_jobs
+                      WHERE created_at < now() - make_interval(months => ?)
+                  )
+                """, auditRetentionMonths);
+
+        if (leads > 0 || contacts > 0 || activities > 0 || purgedImportErrorRows > 0) {
             auditService.record("DELETE", "GDPR_ANONYMIZATION", null, null,
-                    Map.of("anonymizedLeads", leads, "anonymizedContacts", contacts));
-            log.info("DSGVO-Anonymisierung: {} Leads, {} Kontakte", leads, contacts);
+                    Map.of("anonymizedLeads", leads, "anonymizedContacts", contacts,
+                            "anonymizedActivities", activities,
+                            "purgedImportErrorRows", purgedImportErrorRows));
+            log.info("DSGVO-Anonymisierung: {} Leads, {} Kontakte, {} Aktivitaeten, {} Import-Fehlerzeilen",
+                    leads, contacts, activities, purgedImportErrorRows);
         }
     }
 }

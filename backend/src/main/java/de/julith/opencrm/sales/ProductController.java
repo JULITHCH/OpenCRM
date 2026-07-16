@@ -87,8 +87,8 @@ public class ProductController {
     @PreAuthorize(CAN_MANAGE)
     @Transactional
     public ResponseEntity<ProductResponse> create(@Valid @RequestBody ProductCreateRequest request) {
-        productRepository.findBySkuAndDeletedAtIsNull(request.sku()).ifPresent(existing -> {
-            throw new IllegalArgumentException("SKU " + request.sku() + " existiert bereits");
+        productRepository.findBySku(request.sku()).ifPresent(existing -> {
+            throw new de.julith.opencrm.shared.web.DuplicateException("SKU " + request.sku() + " existiert bereits");
         });
         // E-01: Produktpreise laufen in der Tenant-Waehrung
         Product product = new Product(TenantContext.get(), request.sku(), request.name(), request.listPrice(),
@@ -109,8 +109,9 @@ public class ProductController {
     public ProductResponse patch(@PathVariable UUID id, @RequestBody ProductPatchRequest request) {
         Product product = load(id);
         if (request.sku() != null && !request.sku().equals(product.getSku())) {
-            productRepository.findBySkuAndDeletedAtIsNull(request.sku()).ifPresent(existing -> {
-                throw new IllegalArgumentException("SKU " + request.sku() + " existiert bereits");
+            productRepository.findBySku(request.sku()).ifPresent(existing -> {
+                throw new de.julith.opencrm.shared.web.DuplicateException(
+                        "SKU " + request.sku() + " existiert bereits");
             });
             product.setSku(request.sku());
         }

@@ -1,6 +1,9 @@
 spring:
   application:
     name: opencrm-backend
+  lifecycle:
+    # Laufende Anfragen bekommen bis zu 20 s Zeit, bevor der Kontext schliesst (Graceful Shutdown)
+    timeout-per-shutdown-phase: 20s
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/opencrm}
     username: ${DB_USER:opencrm_app}
@@ -23,16 +26,31 @@ spring:
     multipart:
       max-file-size: 50MB
       max-request-size: 55MB
-
-opencrm:
-  storage:
-    local:
-      root: ${OPENCRM_STORAGE_ROOT:${java.io.tmpdir}/opencrm-storage}
   security:
     oauth2:
       resourceserver:
         jwt:
+          # OAuth2 Resource Server: Boot legt den JwtDecoder nur an, wenn dieser spring.*-Key gesetzt ist
           issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8081/realms/opencrm}
+
+opencrm:
+  storage:
+    # local (Default, Dev/Test) oder s3 (Produktion: persistent, pod-übergreifend)
+    type: ${OPENCRM_STORAGE_TYPE:local}
+    local:
+      root: ${OPENCRM_STORAGE_ROOT:${java.io.tmpdir}/opencrm-storage}
+    s3:
+      endpoint: ${OPENCRM_S3_ENDPOINT:}
+      region: ${OPENCRM_S3_REGION:us-east-1}
+      bucket: ${OPENCRM_S3_BUCKET:opencrm}
+      access-key: ${OPENCRM_S3_ACCESS_KEY:}
+      secret-key: ${OPENCRM_S3_SECRET_KEY:}
+      path-style: ${OPENCRM_S3_PATH_STYLE:true}
+  rate-limit:
+    requests-per-minute: ${OPENCRM_RATE_LIMIT_PER_MINUTE:600}
+  auth:
+    # Erwartete Audience im Access Token (docs/05 Abschnitt 3.2); leer = keine aud-Pruefung (nur Dev)
+    expected-audience: ${OPENCRM_EXPECTED_AUDIENCE:}
 
 management:
   endpoints:
@@ -43,6 +61,19 @@ management:
     health:
       probes:
         enabled: true
+      group:
+        readiness:
+          # DB gehoert zur Readiness: ein Pod ohne funktionierende DB-Verbindung nimmt keinen Verkehr an
+          include: readinessState,db
+  info:
+    git:
+      mode: full
+  prometheus:
+    metrics:
+      export:
+        enabled: true
 
 server:
   port: 8080
+  # Graceful Shutdown: laufende Requests werden beim Rollout/Skalieren zu Ende bedient
+  shutdown: graceful

@@ -38,15 +38,18 @@ public class LeadController {
     private final LeadService leadService;
     private final AssignmentEngine assignmentEngine;
     private final LeadConversionService leadConversionService;
+    private final de.julith.opencrm.shared.security.AccessGuard accessGuard;
 
     public LeadController(LeadRepository leadRepository, LeadAssignmentRepository leadAssignmentRepository,
                           LeadService leadService, AssignmentEngine assignmentEngine,
-                          LeadConversionService leadConversionService) {
+                          LeadConversionService leadConversionService,
+                          de.julith.opencrm.shared.security.AccessGuard accessGuard) {
         this.leadRepository = leadRepository;
         this.leadAssignmentRepository = leadAssignmentRepository;
         this.leadService = leadService;
         this.assignmentEngine = assignmentEngine;
         this.leadConversionService = leadConversionService;
+        this.accessGuard = accessGuard;
     }
 
     public record LeadCreateRequest(@NotBlank String title, String companyName, String firstName, String lastName,
@@ -94,17 +97,21 @@ public class LeadController {
     public PageEnvelope<LeadResponse> list(@RequestParam(required = false) String q,
                                            @RequestParam(required = false) Lead.Status status,
                                            @RequestParam(required = false) UUID ownerId,
+                                           @RequestParam(required = false) String externalId,
                                            @RequestParam(required = false) String cursor,
                                            @RequestParam(required = false) Integer limit) {
         int pageSize = Cursors.clampLimit(limit);
         var pageable = PageRequest.ofSize(pageSize + 1);
         String query = q == null || q.isBlank() ? null : q;
+        // sales-rep sieht nur eigene Leads (docs/06 Abschnitt 10): Owner-Scope überschreibt den Parameter
+        UUID effectiveOwner = accessGuard.ownerFilter().orElse(ownerId);
         List<Lead> rows;
         if (cursor == null) {
-            rows = leadRepository.findPage(query, status, ownerId, pageable);
+            rows = leadRepository.findPage(query, status, effectiveOwner, externalId, pageable);
         } else {
             Cursors.Cursor decoded = Cursors.decode(cursor);
-            rows = leadRepository.findPageAfter(query, status, ownerId, decoded.createdAt(), decoded.id(), pageable);
+            rows = leadRepository.findPageAfter(query, status, effectiveOwner, externalId,
+                    decoded.createdAt(), decoded.id(), pageable);
         }
         return PageEnvelope.of(rows.stream().map(LeadResponse::from).toList(), pageSize,
                 r -> Cursors.encode(OffsetDateTime.parse(r.createdAt()), r.id()));
@@ -131,6 +138,9 @@ public class LeadController {
         if (request.source() != null) {
             lead.setSource(request.source());
         }
+        if (request.externalId() != null && !request.externalId().isBlank()) {
+            lead.setExternalId(request.externalId());
+        }
         if (request.custom() != null) {
             lead.setCustom(request.custom());
         }
@@ -153,7 +163,7 @@ public class LeadController {
     @PreAuthorize(CAN_ASSIGN)
     @Transactional
     public java.util.Map<String, Integer> reapplyRulesBulk() {
-        List<Lead> candidates = leadRepository.findPage(null, Lead.Status.NEW, null,
+        List<Lead> candidates = leadRepository.findPage(null, Lead.Status.NEW, null, null,
                 org.springframework.data.domain.PageRequest.ofSize(1000));
         int assigned = 0;
         for (Lead lead : candidates) {
@@ -167,6 +177,7 @@ public class LeadController {
     @PostMapping("/{id}/convert")
     @PreAuthorize(CAN_WRITE)
     public ConversionResponse convert(@PathVariable UUID id, @RequestBody(required = false) ConvertRequest request) {
+        accessGuard.requireCanMutate(load(id).getOwnerId());
         var result = leadConversionService.convert(id,
                 request != null ? request.accountId() : null,
                 request != null ? request.opportunityName() : null);
@@ -174,11 +185,18 @@ public class LeadController {
                 result.contactId(), result.opportunityId());
     }
 
+    @PostMapping("/{id}/reactivate")
+    @PreAuthorize(CAN_ASSIGN)
+    public LeadResponse reactivate(@PathVariable UUID id) {
+        return LeadResponse.from(leadService.reactivate(id));
+    }
+
     @PatchMapping("/{id}")
     @PreAuthorize(CAN_WRITE)
     @Transactional
     public LeadResponse patch(@PathVariable UUID id, @RequestBody LeadPatchRequest request) {
         Lead lead = load(id);
+        accessGuard.requireCanMutate(lead.getOwnerId());
         if (request.title() != null) {
             lead.setTitle(request.title());
         }
