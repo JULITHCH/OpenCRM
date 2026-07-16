@@ -139,7 +139,7 @@ WHERE pl.tenant_id = current_setting('app.current_tenant', true)::uuid
   AND (pl.valid_to IS NULL OR pl.valid_to >= :pricing_date);
 ```
 
-Hinweis: Das kanonische Datenmodell enthaelt noch kein Feld, das einen Account mit einer Preisliste verknuepft (vorgesehen: `accounts.price_list_id`, nullable, FK auf `price_lists`). Diese Ergaenzung ist mit dem Datenmodell-Kapitel abzustimmen (siehe Offene Punkte).
+Hinweis: Die Verknuepfung ist entschieden (E-10, siehe [13-entscheidungen.md](13-entscheidungen.md)): `accounts.price_list_id` (uuid, nullable, FK auf `price_lists`) ist Teil des kanonischen Datenmodells (siehe [03-datenmodell.md](03-datenmodell.md)) — genau eine optionale Preisliste je Account; eine n:m-Zuordnung wurde als Phase-1-Komplexitaet abgelehnt.
 
 ### 2.2 Gueltigkeitszeitraeume
 
@@ -149,9 +149,9 @@ Hinweis: Das kanonische Datenmodell enthaelt noch kein Feld, das einen Account m
 
 ### 2.3 Waehrungsregel
 
-- **Eine Waehrung je Opportunity**: `opportunities.currency` wird beim Anlegen gesetzt (Default: `tenants.default_currency`) und ist aenderbar, solange keine Positionen existieren.
+- **Eine Waehrung je Mandant (E-01, siehe [13-entscheidungen.md](13-entscheidungen.md))**: In Phase 1 entspricht `opportunities.currency` immer der Tenant-Default-Waehrung (`tenants.default_currency`); der Service-Layer erzwingt das beim Anlegen (ebenso fuer `products.currency`). Multi-Currency ist eine spaetere Ausbaustufe; die Waehrungsspalten bleiben dafuer erhalten. Damit entfaellt das Umrechnungsthema im Reporting: KPIs summieren ohne Umrechnung in der Mandanten-Waehrung (siehe [09-dashboard-und-reporting.md](09-dashboard-und-reporting.md)).
 - **Positionen erben die Waehrung** der Opportunity; `opportunity_items` traegt bewusst keine eigene Waehrungsspalte. `unit_price` ist immer in der Opportunity-Waehrung zu verstehen.
-- Preisquellen in fremder Waehrung (Preisliste oder `products.currency` ungleich Opportunity-Waehrung) werden **nicht umgerechnet**; die Preisfindung liefert dann keinen Vorschlag, und der Nutzer muss `unit_price` manuell setzen (API: 422 `currency-mismatch` beim Versuch der automatischen Uebernahme). Waehrungsumrechnung ist kein Bestandteil von Phase 1.
+- Preisquellen in fremder Waehrung (Preisliste oder `products.currency` ungleich Opportunity-Waehrung) werden **nicht umgerechnet**; die Preisfindung liefert dann keinen Vorschlag, und der Nutzer muss `unit_price` manuell setzen (API: 422 `currency-mismatch` beim Versuch der automatischen Uebernahme). Da der Service-Layer in Phase 1 durchgaengig die Mandanten-Waehrung erzwingt (E-01), ist dieser Pfad ein Schutzmechanismus (z. B. fuer Altdaten); Waehrungsumrechnung ist kein Bestandteil von Phase 1.
 
 ## 3. Steuern: Abgrenzung Phase 1
 
@@ -210,7 +210,7 @@ stateDiagram-v2
 Regeln:
 
 - **OPEN -> WON**: Verschieben in die `is_won`-Stage setzt `status = WON` und `won_at = now()` (UTC). Voraussetzung: mindestens eine Position (`opportunity_items`) existiert; sonst 422 (`.../won-requires-items`), damit Umsatz-KPIs nicht auf leeren Opportunities basieren.
-- **OPEN -> LOST**: Verschieben in eine `is_lost`-Stage setzt `status = LOST` und `lost_at = now()`. **`lost_reason` ist Pflicht** — die API lehnt den Uebergang ohne `lost_reason` mit 422 ab. `lost_reason` ist Freitext mit tenant-konfigurierbarer Vorschlagsliste (Phase 1: Freitext).
+- **OPEN -> LOST**: Verschieben in eine `is_lost`-Stage setzt `status = LOST` und `lost_at = now()`. **`lost_reason` ist Pflicht** — die API lehnt den Uebergang ohne `lost_reason` mit 422 ab. `lost_reason` ist in Phase 1 Freitext; eine tenant-konfigurierbare Auswahlliste folgt in Phase 2, bestehende Freitexte bleiben erhalten (E-32, siehe [13-entscheidungen.md](13-entscheidungen.md)).
 - **Reopen** (WON -> OPEN, LOST -> OPEN): nur sales-manager und tenant-admin. Verschieben in eine offene Stage setzt `status = OPEN` und leert `won_at` bzw. `lost_at`/`lost_reason`. Jeder Reopen erzeugt einen `audit_log`-Eintrag (action `UPDATE`, diff mit altem Status). Reopens veraendern rueckwirkend KPI-Werte; das ist beabsichtigt (Korrekturfaelle) und wird im Dashboard durch den 15-Minuten-Refresh der materialisierten Sicht sichtbar (siehe [09-dashboard-und-reporting.md](09-dashboard-und-reporting.md)).
 - Ein direkter WON <-> LOST-Wechsel ist nicht vorgesehen; der Weg fuehrt ueber Reopen.
 - `status`, `won_at`, `lost_at` werden ausschliesslich vom Service-Layer als Folge des Stage-Wechsels gesetzt, nie direkt per API-Feld beschrieben (Konsistenz von Stage und Status).
@@ -271,12 +271,13 @@ SELECT o.id, o.amount, COALESCE(c.item_sum, 0) AS item_sum
 FROM opportunities o
 LEFT JOIN calculated c ON c.opportunity_id = o.id
 WHERE o.deleted_at IS NULL
+  AND NOT o.is_estimated
   AND o.amount IS DISTINCT FROM COALESCE(c.item_sum, 0);
 ```
 
 Gefundene Abweichungen werden korrigiert (`UPDATE opportunities SET amount = ...`), als Micrometer-Counter `opencrm.opportunity.amount.drift` gezaehlt und im Log ausgewiesen. Ein Zaehlerstand ungleich 0 ist ein Bug-Indikator im Service-Layer, kein Normalzustand.
 
-- Opportunities **ohne Positionen** haben `amount = 0`. Ein manuell gepflegter Schaetzbetrag ohne Positionen ist in Phase 1 nicht vorgesehen (siehe Offene Punkte).
+- Opportunities **ohne Positionen** duerfen einen manuellen Schaetzbetrag fuehren (E-14, siehe [13-entscheidungen.md](13-entscheidungen.md); revidiert die fruehere Festlegung "`amount = 0` ohne Positionen"): `amount` wird manuell gesetzt, und `opportunities.is_estimated` (boolean NOT NULL DEFAULT false) markiert den Wert mit `true` als Schaetzung. Mit dem Anlegen der **ersten Position** uebernimmt die Positionslogik: der Service-Layer berechnet `amount` aus den Positionen und setzt `is_estimated = false`. Der Forecast (Abschnitt 7) zaehlt Schaetzwerte mit. Der Abgleich-Job (oben) laesst Schaetzbetraege unangetastet (Filter `NOT o.is_estimated`).
 
 ## 7. Forecast: gewichtete Pipeline
 
@@ -284,6 +285,7 @@ Definition laut KPI-Baseline (Details in [09-dashboard-und-reporting.md](09-dash
 
 - **Pipeline-Wert** = Summe `amount` offener Opportunities (`status = OPEN`) je Stage.
 - **Gewichteter Forecast** = Summe (`amount * stage.probability / 100`), da `probability` als Prozentwert gespeichert ist.
+- **Schaetzbetraege zaehlen mit** (E-14): Opportunities ohne Positionen mit `is_estimated = true` fliessen mit ihrem manuellen `amount` in Pipeline-Wert und gewichteten Forecast ein (Abschnitt 6.3).
 
 Beispiel (Default-Pipeline, offene Opportunities eines Teams):
 
@@ -295,7 +297,7 @@ Beispiel (Default-Pipeline, offene Opportunities eines Teams):
 | Verhandlung | 75.00 | 20000.00 | 15000.00 |
 | **Summe** | | **150000.00** | **49000.00** |
 
-Der ungewichtete Pipeline-Wert betraegt 150000.00, der gewichtete Forecast 49000.00 (jeweils in Tenant-Default-Waehrung; Opportunities in abweichender Waehrung siehe Offene Punkte). Massgeblich ist immer die **aktuelle** Stage-Zuordnung; eine Historisierung von Stage-Wechseln fuer Verlaufs-Forecasts ist nicht Teil von Phase 1.
+Der ungewichtete Pipeline-Wert betraegt 150000.00, der gewichtete Forecast 49000.00 (jeweils in Tenant-Default-Waehrung; abweichende Waehrungen gibt es in Phase 1 nicht, siehe Abschnitt 2.3 / E-01). Massgeblich ist immer die **aktuelle** Stage-Zuordnung; eine Historisierung von Stage-Wechseln fuer Verlaufs-Forecasts ist nicht Teil von Phase 1.
 
 ## 8. Produktinteresse am Lead
 
@@ -358,8 +360,10 @@ Konsequenzen fuer die Umsetzung:
 
 ## Offene Punkte
 
-1. **Account-Preislisten-Verknuepfung**: Das kanonische Datenmodell enthaelt noch kein Verknuepfungsfeld. Vorschlag: `accounts.price_list_id` (nullable, FK auf `price_lists`, 1:1-Zuordnung je Account). Entscheidung und Aufnahme in [03-datenmodell.md](03-datenmodell.md) stehen aus; Alternative waere eine n:m-Zuordnung mit Prioritaet, die fuer Phase 1 als zu komplex eingeschaetzt wird.
-2. **Mengenstaffeln**: `price_list_items` kennt keinen Staffelpreis (z. B. `min_quantity`). Bedarf fuer Phase 2 klaeren; das Positions-Snapshot-Prinzip bliebe davon unberuehrt.
-3. **Schaetzbetrag ohne Positionen**: Soll eine frisch konvertierte Opportunity einen manuellen Schaetzwert fuehren duerfen, bis Positionen existieren (`amount` waere dann zeitweise nicht positionsgedeckt)? Aktuelle Festlegung: nein, `amount = 0` ohne Positionen — Auswirkung auf Forecast-Aussagekraft in fruehen Stages pruefen.
-4. **Multi-Currency im Reporting**: Opportunities in abweichender Waehrung koennen in Tenant-KPIs nicht sauber summiert werden; Quelle und Pflege von Umrechnungskursen sind ungeklaert (Abstimmung mit [09-dashboard-und-reporting.md](09-dashboard-und-reporting.md)); Phase 1 weist gemischte Waehrungen getrennt aus.
-5. **Vorschlagsliste fuer lost_reason**: Freitext vs. tenant-konfigurierbare Auswahlliste (bessere Auswertbarkeit der Lost-Analyse). Phase 1 startet mit Freitext; Entscheidung fuer die Auswahlliste inkl. Migration bestehender Werte offen.
+Alle offenen Punkte dieses Kapitels sind entschieden oder terminiert (Stand 2026-07-16) — Details im [Entscheidungsprotokoll](13-entscheidungen.md).
+
+1. **Account-Preislisten-Verknuepfung** -> **E-10**: `accounts.price_list_id` (nullable, FK auf `price_lists`) ist jetzt Teil des kanonischen Datenmodells (Abschnitt 2.1, [03-datenmodell.md](03-datenmodell.md)); n:m-Zuordnung abgelehnt.
+2. **Mengenstaffeln** -> **E-31**: Phase-2-Backlog; das Positions-Snapshot-Prinzip bleibt unberuehrt.
+3. **Schaetzbetrag ohne Positionen** -> **E-14**: manueller Schaetzbetrag mit `is_estimated`-Flag erlaubt (Abschnitt 6.3); revidiert die fruehere Festlegung "`amount = 0` ohne Positionen".
+4. **Multi-Currency im Reporting** -> **E-01**: eine Waehrung je Mandant in Phase 1 (Abschnitt 2.3); das Umrechnungsthema entfaellt.
+5. **Vorschlagsliste fuer lost_reason** -> **E-32**: Freitext in Phase 1, tenant-konfigurierbare Auswahlliste in Phase 2 (bestehende Freitexte bleiben erhalten).

@@ -58,6 +58,8 @@ Einfacher `@Scheduled`-Worker, der Zeilen in einer Schleife verarbeitet. Abgeleh
 
 ## Offene Punkte
 
-1. Poll-Intervall und maximale parallele Jobs je Instanz/je Tenant muessen unter Last kalibriert werden.
-2. Aufbewahrungsfristen fuer `import_job_errors` und Spring-Batch-Metadaten (Aufraeumjob) sind festzulegen.
-3. Kriterien, ab wann der Wechsel auf ein dediziertes Worker-Deployment oder einen Broker ausgeloest wird, sind zu definieren.
+Alle offenen Punkte sind entschieden oder terminiert (Stand 2026-07-16) — Details im [Entscheidungsprotokoll](../13-entscheidungen.md).
+
+1. Poll-Intervall und Parallelitaet → **E-68**: Poll-Intervall 5 s; max. 2 parallele Import-Jobs je Tenant, 4 je Instanz; Kalibrierung unter Last in M2.
+2. Aufbewahrungsfristen → **E-69**: `import_job_errors` 90 Tage, Spring-Batch-Metadaten 30 Tage, Dateien im Objekt-Storage 30 Tage; taeglicher Cleanup-Job.
+3. Broker-Wechselkriterium → **E-70**: Job-Wartezeit p95 > 5 min ueber 7 Tage trotz Worker-Deployment oder Event-Bedarf durch Webhooks.

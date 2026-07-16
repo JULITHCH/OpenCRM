@@ -29,5 +29,7 @@ Dieser Index listet alle Architecture Decision Records des Projekts OpenCRM. ADR
 
 ## Offene Punkte
 
-1. Prozess fuer neue ADRs (Review-Pflicht, Freigabe durch wen) ist noch nicht formal festgelegt.
-2. Ob ADRs nach Projektstart im Repo des Backends oder weiterhin in diesem Doku-Verzeichnis gepflegt werden, ist offen.
+Alle offenen Punkte sind entschieden oder terminiert (Stand 2026-07-16) — Details im [Entscheidungsprotokoll](../13-entscheidungen.md).
+
+1. ADR-Prozess → **E-73**: neue ADRs per Pull Request, Review durch mind. eine Entwicklerin/einen Entwickler, Freigabe durch Lead Architecture.
+2. Ablageort → **E-73/E-74**: ADRs bleiben in `docs/adr/` im Monorepo.

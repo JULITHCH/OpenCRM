@@ -58,6 +58,8 @@ Vor Keycloak Organizations uebliches Muster: Tenant-Zuordnung ueber Gruppen oder
 
 ## Offene Punkte
 
-1. MFA-Strategie (realm-weit verpflichtend vs. optional je Nutzer) ist noch nicht entschieden.
-2. Ausnahme-Prozess fuer Grosskunden mit hartem Bedarf an eigenem Realm (Vertragsfrage) ist offen.
-3. Werkzeug fuer Keycloak-Konfiguration-as-Code (Realm-JSON-Import vs. Terraform-Provider vs. keycloak-config-cli) ist noch auszuwaehlen.
+Alle offenen Punkte sind entschieden oder terminiert (Stand 2026-07-16) — Details im [Entscheidungsprotokoll](../13-entscheidungen.md).
+
+1. MFA-Strategie → **E-04**: TOTP-Pflicht fuer `platform-admin` und `tenant-admin`; alle anderen Rollen Opt-in, je Organization aktivierbar.
+2. Grosskunden-Realm → **E-60**: eigener Realm nur als Enterprise-Vertragsoption.
+3. Konfiguration-as-Code-Werkzeug → **E-61**: keycloak-config-cli; Realm-Konfiguration unter `infra/keycloak/`.

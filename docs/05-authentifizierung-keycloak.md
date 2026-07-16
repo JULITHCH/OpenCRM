@@ -101,7 +101,7 @@ Zusaetzlich dient `opencrm-api` als **Audience**: ein Audience-Mapper am Client-
 
 Fuenf **Realm-Rollen** (keine Client-Rollen, keine Composite-Hierarchie in Phase 1 - Rollen werden explizit zugewiesen):
 
-- `platform-admin`: Betreiber, mandantenuebergreifend, nur Plattformverwaltung - kein fachlicher Zugriff auf CRM-Daten der Mandanten.
+- `platform-admin`: Betreiber, mandantenuebergreifend, nur Plattformverwaltung - kein fachlicher Zugriff auf CRM-Daten der Mandanten (Ausnahme: auditierter Support-Zugriff "Assume Tenant", Abschnitt 4.1).
 - `tenant-admin`: Administration innerhalb des eigenen Mandanten.
 - `sales-manager`: Vertriebsleitung, Team-Scope.
 - `sales-rep`: Verkaeufer, Eigen-Scope.
@@ -125,6 +125,10 @@ Fuenf **Realm-Rollen** (keine Client-Rollen, keine Composite-Hierarchie in Phase
 | Audit-Log einsehen | Plattform-Ereignisse | Ja (Mandant) | - | - | - |
 
 Die Spaltenwerte "eigene"/"eigenes Team" sind **Datenscopes**, die das Backend durchsetzt (siehe Abschnitt 11); Keycloak kennt nur die Rollenzugehoerigkeit. Massgeblich fuer die Rechte je Operation ist der Endpunkt-Katalog in [10-api-design.md](10-api-design.md); diese Matrix ist die Zusammenfassung. Details zu Lead-Aktionen in [06-lead-management.md](06-lead-management.md), Dashboard-Sichtbarkeit in [09-dashboard-und-reporting.md](09-dashboard-und-reporting.md).
+
+### 4.1 Support-Zugriff "Assume Tenant" (E-05)
+
+Fuer Support-Faelle startet ein `platform-admin` eine zeitlich begrenzte Support-Session auf einen Ziel-Mandanten ("Assume Tenant"): maximal 4 Stunden, ein expliziter Grund ist Pflicht. Das Backend setzt dafuer den Tenant-Kontext des Ziel-Mandanten (regulaerer RLS-Pfad, kein Bypass, siehe [04-multi-tenancy.md](04-multi-tenancy.md), Abschnitt 7); alle Aktionen werden im `audit_log` mit Support-Kennzeichnung erfasst, und die tenant-admins des betroffenen Mandanten werden automatisch benachrichtigt. Es sind keine neuen Token-Claims noetig - die Autorisierung der Support-Session liegt vollstaendig im Backend.
 
 ## 5. Token-Design
 
@@ -280,7 +284,7 @@ ON CONFLICT (keycloak_id) DO UPDATE
 Konsistenzregeln:
 
 - Weicht der `tenant_id`-Claim vom gespeicherten `users.tenant_id` ab, wird der Request mit 403 abgelehnt und ein Alert ausgeloest (Organization-Wechsel ist in Phase 1 nicht vorgesehen).
-- **Deaktivierung**: fuehrend ist Keycloak (`enabled = false` → keine neuen Tokens). Der `tenant-admin` deaktiviert Nutzer ueber die OpenCRM-Oberflaeche; das Backend setzt `users.active = false` und schaltet den Keycloak-Account per Admin-API ab. Bereits ausgestellte Access Tokens bleiben maximal 5 Minuten gueltig; zusaetzlich prueft der Request-Filter `users.active` und lehnt inaktive Nutzer sofort mit 403 ab. Inaktive Nutzer werden bei Round-Robin-Zuweisungen uebersprungen (siehe [06-lead-management.md](06-lead-management.md)).
+- **Deaktivierung**: fuehrend ist Keycloak (`enabled = false` → keine neuen Tokens). Der `tenant-admin` deaktiviert Nutzer ueber die OpenCRM-Oberflaeche; das Backend setzt `users.active = false`, schaltet den Keycloak-Account per Admin-API ab und beendet zusaetzlich dessen aktive Keycloak-Sessions ueber die Admin-API (E-24). Bereits ausgestellte Access Tokens bleiben maximal 5 Minuten gueltig; zusaetzlich prueft der Request-Filter `users.active` und lehnt inaktive Nutzer sofort mit 403 ab. Ein reiner Rollenwechsel (Downgrade) beendet dagegen keine Sessions - hier genuegt die 5-Minuten-Token-Lifetime (E-24). Inaktive Nutzer werden bei Round-Robin-Zuweisungen uebersprungen (siehe [06-lead-management.md](06-lead-management.md)).
 - Geloescht wird nicht: `users`-Zeilen bleiben wegen historischer Referenzen (`lead_assignments`, `audit_log`) erhalten, nur `active = false`.
 
 ## 8. Logout und Session-Invalidierung
@@ -288,6 +292,7 @@ Konsistenzregeln:
 - **RP-initiated Logout**: die SPA ruft den Logout-Endpunkt mit `id_token_hint` und `post_logout_redirect_uri` auf. Keycloak beendet die SSO-Session und invalidiert alle Refresh Tokens dieser Session; danach Redirect zur Startseite.
 - **Access Tokens sind statuslos**: ein bereits ausgestelltes Access Token bleibt bis `exp` gueltig (maximal 5 Minuten). Das ist der akzeptierte Kompromiss fuer statuslose Validierung; die kurze Lifetime begrenzt das Fenster.
 - **Administrative Invalidierung**: bei Kompromittierung setzt der Betreiber die Realm-weite "not-before"-Policy (Push Revocation) bzw. beendet einzelne Sessions in der Admin-Konsole; das Backend benoetigt dafuer keine Aenderung, da abgelaufene/widerrufene Refresh Tokens beim naechsten Refresh scheitern.
+- **Deaktivierung vs. Rollenwechsel (E-24)**: Bei Deaktivierung eines Nutzers beendet das Backend dessen Keycloak-Sessions ueber die Admin-API (Abschnitt 7). Ein Rollenwechsel loest keine Session-Beendigung aus; die 5-Minuten-Lifetime des Access Tokens begrenzt die Wirkzeit der alten Rolle.
 - **Idle-Timeout**: ohne Aktivitaet laeuft die SSO-Session nach 30 Minuten ab (Abschnitt 9); der naechste Refresh scheitert und die SPA leitet zum Login.
 - Backchannel Logout ist in Phase 1 nicht erforderlich (Backend haelt keine Sessions).
 
@@ -296,7 +301,7 @@ Konsistenzregeln:
 | Bereich | Einstellung (Realm `opencrm`) |
 |---|---|
 | Passwort-Policy | `length(12) and upperCase(1) and lowerCase(1) and digits(1) and specialChars(1) and notUsername and passwordHistory(5)` |
-| MFA (TOTP) | Realm-weit als Authenticator konfiguriert; Pflicht optional **je Organization** aktivierbar (tenant-spezifische Anforderung). Umsetzung ueber Organization-gebundenen Authentication Flow bzw. Required Action pro Nutzergruppe. |
+| MFA (TOTP) | **Pflicht fuer `platform-admin` und `tenant-admin`** (E-04), umgesetzt in Keycloak z. B. ueber Required Action bzw. Conditional OTP im Authentication Flow fuer die betroffenen Rollen. Fuer alle anderen Rollen Opt-in, **je Organization** aktivierbar (Organization-gebundener Authentication Flow). |
 | Brute-Force-Detection | aktiviert: max. 5 Fehlversuche, Wartezeit initial 1 min, eskalierend bis 15 min; permanente Sperre nur manuell durch Admin |
 | Access Token Lifespan | **5 Minuten** (konfigurierbar) |
 | SSO Session Idle | **30 Minuten** (bestimmt effektive Refresh-Gueltigkeit; konfigurierbar) |
@@ -326,8 +331,10 @@ Keycloak liefert **Authentifizierung, Rollen und Mandanten-Claims - nicht mehr**
 
 ## Offene Punkte
 
-1. Finale Produktions-Domains fuer `auth.opencrm.example` und `app.opencrm.example` (Redirect-URIs, Web Origins, Issuer-URI) sind noch festzulegen.
-2. `platform-admin`-Supportzugriff auf Mandantendaten (zeitlich begrenztes "Assume Tenant" mit Audit-Eintrag vs. striktes Verbot) ist zu entscheiden.
-3. MFA-Governance: erzwingt der Betreiber TOTP fuer alle `tenant-admin`-Konten, oder bleibt es vollstaendig Opt-in je Organization?
-4. Rollen-Downgrade waehrend laufender Session: reicht die 5-Minuten-Token-Lifetime, oder soll die Admin-API bei Rollenentzug zusaetzlich automatisch die Sessions des Nutzers beenden?
-5. Identity Brokering je Organization (Kunden-SSO via SAML/OIDC) ist fuer Phase 2 vorgesehen; Anforderungen (Attribut-Mapping, JIT aus Fremd-IdP) sind noch nicht erhoben.
+Alle offenen Punkte dieses Kapitels sind entschieden oder terminiert (Stand 2026-07-16) — Details im [Entscheidungsprotokoll](13-entscheidungen.md).
+
+1. **Produktions-Domains** → **E-23**: Platzhalter bleiben bis zur Domain-Entscheidung (EXTERN, E-53); alle URLs sind ueber Konfiguration/Helm-Values gesetzt, nichts ist hart kodiert.
+2. **Support-Zugriff "Assume Tenant"** → **E-05**: erlaubt mit Schutzmassnahmen (max. 4 h, Grund Pflicht, Audit-Markierung, Benachrichtigung der tenant-admins), siehe Abschnitt 4.1.
+3. **MFA-Governance** → **E-04**: TOTP-Pflicht fuer `platform-admin` und `tenant-admin`; fuer alle anderen Rollen Opt-in, je Organization aktivierbar.
+4. **Rollen-Downgrade** → **E-24**: die 5-Minuten-Token-Lifetime genuegt; bei Deaktivierung eines Nutzers werden zusaetzlich seine Keycloak-Sessions ueber die Admin-API beendet.
+5. **Identity Brokering** → **E-25**: Phase 2+; Anforderungsaufnahme beim ersten konkreten Kundenbedarf.

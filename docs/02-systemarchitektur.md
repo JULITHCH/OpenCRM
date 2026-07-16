@@ -340,12 +340,13 @@ Konventionen: `400` nicht parsbarer Request (fehlerhaftes JSON), `401` fehlendes
 - Domaenen-Events werden in derselben Transaktion konsumiert (kein At-least-once-Problem); ein spaeterer Wechsel auf asynchrone Events erfordert ein Outbox-Muster.
 - Spring-Batch-Jobs arbeiten chunk-basiert: eine Transaktion je Chunk, `SET LOCAL` je Chunk-Transaktion mit der `tenant_id` des Jobs. Job-Statusuebergaenge in `import_jobs`/`export_jobs` erfolgen mit `SELECT FOR UPDATE`, damit mehrere Backend-Instanzen keinen Job doppelt starten.
 - `REFRESH MATERIALIZED VIEW CONCURRENTLY` laeuft als eigene, mandantenuebergreifende Wartungstransaktion des Schedulers (die Sicht enthaelt `tenant_id`; die Leseabfragen bleiben RLS- bzw. filtergeschuetzt).
+- Alle wiederkehrenden Scheduler-Jobs (MV-Refresh, SLA-Checks, Cleanup) werden bei mehreren Backend-Replikas ueber ShedLock mit JDBC-Provider (PostgreSQL-Locktabelle) koordiniert, sodass jeder Lauf genau einmal ausgefuehrt wird (E-43); Spring-Batch-Laeufe sind zusaetzlich ueber den Job-Tabellen-Status serialisiert (siehe oben).
 
 ### 8.4 Zeitzonen und UTC
 
 - Persistenz durchgaengig `timestamptz`; JVM und Datenbank-Sessions laufen mit UTC, JDBC uebertraegt `java.time.Instant`/`OffsetDateTime`.
 - Die API liefert Zeitstempel als ISO-8601 mit UTC-Offset (`2026-07-16T09:30:00Z`); die SPA rendert in der Nutzer-Zeitzone.
-- Tagesgrenzen fuer KPIs (z. B. `mv_sales_kpis_daily`) werden in UTC gebildet; abweichende Mandanten-Zeitzonen fuer Berichtsgrenzen sind ein offener Punkt (siehe unten).
+- Tagesgrenzen fuer KPIs (z. B. `mv_sales_kpis_daily`) werden strikt in UTC gebildet (entschieden, E-42); eine konfigurierbare Berichts-Zeitzone je Tenant ist eine spaetere Ausbaustufe.
 
 ### 8.5 Waehrungen
 
@@ -362,8 +363,10 @@ Konventionen: `400` nicht parsbarer Request (fehlerhaftes JSON), `401` fehlendes
 
 ## 9. Offene Punkte
 
-1. Tagesgrenzen fuer KPI-Aggregation: strikt UTC oder konfigurierbare Berichts-Zeitzone je Tenant (`mv_sales_kpis_daily` muesste dann je Tenant-Zeitzone aggregieren)?
-2. Skalierung des Scheduler-/Batch-Betriebs bei mehreren Backend-Replikas: reicht Leader-Wahl via Job-Tabellen-Locking oder wird ShedLock-artiges DB-Locking als eigener Baustein festgelegt?
-3. Rate Limiting fuer den Service-Client `opencrm-api` (externe Systeme): im Backend (Bucket je Client/Tenant in PostgreSQL) oder erst am Ingress?
-4. SMTP-Anbindung: eigener Relay-Dienst je Umgebung oder Managed-Dienst; Umgang mit Bounce-Handling ist noch nicht entschieden.
-5. Grenzwert fuer synchron erlaubte Exporte: ab welcher Zeilenzahl wird ein Export zwingend als `export_jobs`-Batchlauf ausgefuehrt (Vorschlag: immer asynchron, auch fuer kleine Mengen)?
+Alle offenen Punkte dieses Kapitels sind entschieden oder terminiert (Stand 2026-07-16) — Details im [Entscheidungsprotokoll](13-entscheidungen.md).
+
+1. Tagesgrenzen fuer KPI-Aggregation → **E-42**: strikt UTC in Phase 1; eine konfigurierbare Berichts-Zeitzone je Tenant ist eine spaetere Ausbaustufe.
+2. Scheduler-/Batch-Koordination bei mehreren Backend-Replikas → **E-43**: ShedLock mit JDBC-Provider (PostgreSQL-Locktabelle) fuer alle wiederkehrenden Jobs (siehe Abschnitt 8.3).
+3. Rate Limiting fuer den Service-Client `opencrm-api` → **E-39**: Durchsetzung im Backend, in-memory je Instanz; 600 Requests/min je Client.
+4. SMTP-Anbindung → **E-44**: Managed-E-Mail-Dienst (EU-Anbieter) als Relay; Phase 1 nur Versand, Bounce-Handling Phase 2; Anbieterwahl zusammen mit der Cloud-Entscheidung (E-45).
+5. Grenzwert fuer synchrone Exporte → **E-36**: Exporte laufen immer asynchron ueber `export_jobs`, auch fuer kleine Datenmengen.

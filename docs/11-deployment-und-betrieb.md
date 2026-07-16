@@ -316,7 +316,7 @@ Ergaenzend: JVM-Dashboards (Heap, GC), Spring-Batch-Job-Dauer je `entity_type`, 
 
 ## 9. Security-Betrieb
 
-- **TLS ueberall:** TLS 1.2+ an Ingress (cert-manager/ACME, HSTS); DB-, Keycloak- und S3-Verbindungen mit TLS (`sslmode=verify-full` zur Managed-DB). Cluster-interner mTLS-Bedarf: siehe Offene Punkte.
+- **TLS ueberall:** TLS 1.2+ an Ingress (cert-manager/ACME, HSTS); DB-, Keycloak- und S3-Verbindungen mit TLS (`sslmode=verify-full` zur Managed-DB). Cluster-intern in Phase 1 NetworkPolicies-only (E-47, [13-entscheidungen.md](13-entscheidungen.md)); Service-Mesh-Bedarf wird nach dem Threat-Model-Review in M3 bewertet.
 - **Security-Header (Nginx/Frontend und API):** `Strict-Transport-Security`, `Content-Security-Policy` (nur eigene Origins plus Keycloak-Host), `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `frame-ancestors 'none'`; API sendet zusaetzlich `Cache-Control: no-store` fuer personenbezogene Antworten.
 - **Secrets-Rotation:** Alle Secrets liegen im zentralen Secret-Store (External Secrets, Abschnitt 3.2). Rotationsintervalle: DB-Passwoerter und S3-Keys 90 Tage (automatisiert, Rolling Restart), Keycloak-Client-Secret `opencrm-api` 90 Tage, Break-Glass-Zugaenge nach jeder Nutzung. Keycloak-Signaturschluessel-Rotation ueber Key-Provider mit Ueberlappungsphase.
 - **Dependency- und Image-Scanning:** Dependabot fuer Maven/npm/GitHub Actions; Trivy im CI (Abschnitt 4) plus **taeglicher** Scheduled Scan der in prod laufenden Image-Digests, damit neue CVEs auch ohne Deploy auffallen.
@@ -331,7 +331,7 @@ OpenCRM verarbeitet personenbezogene Daten (Leads, Kontakte, Nutzer) im Auftrag 
 
 | Massnahme | Umsetzung |
 |---|---|
-| Zugangskontrolle | SSO/MFA fuer Betriebszugaenge, Keycloak-MFA fuer tenant-admin (empfohlen), Break-Glass-Verfahren |
+| Zugangskontrolle | SSO/MFA fuer Betriebszugaenge, TOTP-Pflicht fuer platform-admin und tenant-admin (E-04), Break-Glass-Verfahren |
 | Zugriffskontrolle | Realm-Rollen + RLS, `opencrm_app` ohne `BYPASSRLS`, RBAC im Cluster |
 | Trennungskontrolle | Shared Schema mit `tenant_id` + Row-Level Security, Isolationstests in CI ([04-multi-tenancy.md](04-multi-tenancy.md)) |
 | Weitergabekontrolle | TLS ueberall, signierte, zeitlich begrenzte Download-URLs fuer Exporte |
@@ -348,14 +348,16 @@ OpenCRM verarbeitet personenbezogene Daten (Leads, Kontakte, Nutzer) im Auftrag 
 | `audit_log` | 24 Monate, danach Loeschung | Partitionierung nach Monat, Drop alter Partitionen |
 | Backups | 35 Tage Aufbewahrung; geloeschte Daten verschwinden spaetestens mit Ablauf des letzten Backups endgueltig | Backup-Retention; kein selektives Loeschen in Backups (dokumentiert im AV-Vertrag) |
 
-**Tenant-Offboarding:** Bei Kuendigung wechselt der Tenant auf `status=OFFBOARDING`. Der Betreiber erstellt einen vollstaendigen Datenexport ueber die Export-Pipeline (alle Entitaeten als CSV/JSON, `export_jobs`, siehe [08-import-export.md](08-import-export.md)) und stellt ihn per signierter URL bereit. Nach Ablauf einer vertraglich fixierten Frist (Default 30 Kalendertage; Platzhalter, juristisch zu bestaetigen, identisch gefuehrt in [04-multi-tenancy.md](04-multi-tenancy.md), Abschnitt 8.3) loescht ein Offboarding-Job alle Zeilen des Tenants (`DELETE ... WHERE tenant_id = ...` ueber alle Tabellen in FK-sicherer Reihenfolge), die Keycloak-Organization und die Objekte im Storage-Prefix des Tenants. Die Loeschung laeuft ausschliesslich ueber den auditierten Admin-Pfad mit der Rolle `opencrm_platform_ops` (`BYPASSRLS`, siehe [04-multi-tenancy.md](04-multi-tenancy.md)); ein `DELETE` als `opencrm_migrator` waere wegen `FORCE ROW LEVEL SECURITY` ohne gesetzten Tenant-Kontext ein stiller No-Op (0 Zeilen geloescht, Job meldet trotzdem Erfolg). Der Job prueft deshalb den Erfolg je Tabelle: geloeschte Zeilenzahl wird protokolliert, ein abschliessender Nachweis-`SELECT` muss 0 verbleibende Zeilen ergeben. Der Abschluss wird als `audit_log`-Eintrag (`action = DELETE`, `entity_type = TENANT`) und im Betriebsprotokoll dokumentiert.
+**Tenant-Offboarding:** Bei Kuendigung wechselt der Tenant auf `status=OFFBOARDING`. Der Betreiber erstellt einen vollstaendigen Datenexport ueber die Export-Pipeline (alle Entitaeten als CSV/JSON, `export_jobs`, siehe [08-import-export.md](08-import-export.md)) und stellt ihn per signierter URL bereit. Nach Ablauf einer vertraglich fixierten Frist (Default 30 Kalendertage, entschieden als Arbeitsstand E-21, juristische Bestaetigung parallel; identisch gefuehrt in [04-multi-tenancy.md](04-multi-tenancy.md), Abschnitt 8.3) loescht ein Offboarding-Job alle Zeilen des Tenants (`DELETE ... WHERE tenant_id = ...` ueber alle Tabellen in FK-sicherer Reihenfolge), die Keycloak-Organization und die Objekte im Storage-Prefix des Tenants. Die Loeschung laeuft ausschliesslich ueber den auditierten Admin-Pfad mit der Rolle `opencrm_platform_ops` (`BYPASSRLS`, siehe [04-multi-tenancy.md](04-multi-tenancy.md)); ein `DELETE` als `opencrm_migrator` waere wegen `FORCE ROW LEVEL SECURITY` ohne gesetzten Tenant-Kontext ein stiller No-Op (0 Zeilen geloescht, Job meldet trotzdem Erfolg). Der Job prueft deshalb den Erfolg je Tabelle: geloeschte Zeilenzahl wird protokolliert, ein abschliessender Nachweis-`SELECT` muss 0 verbleibende Zeilen ergeben. Der Abschluss wird als `audit_log`-Eintrag (`action = DELETE`, `entity_type = TENANT`) und im Betriebsprotokoll dokumentiert.
 
 **Betroffenenrechte im Betrieb:** Auskunft (Art. 15) wird ueber den Entitaeten-Export je Person unterstuetzt; Berichtigung ueber die normale API. Der Betreiber wirkt nur auf Weisung des Mandanten (AV-Vertrag).
 
 ## Offene Punkte
 
-1. Cloud-Provider und damit das konkrete Managed-PostgreSQL-Angebot (inkl. PITR-Details und Region) sind noch nicht entschieden; davon haengt ab, ob CloudNativePG als Fallback gebraucht wird.
-2. Keycloak: endgueltige Entscheidung eigenes Deployment (Operator) vs. Managed-Angebot, inkl. Kostenvergleich und Update-Verantwortung.
-3. Cluster-interner mTLS (Service Mesh vs. NetworkPolicies-only) ist offen; Phase 1 startet mit NetworkPolicies, Bedarf wird nach Threat-Model-Review bewertet.
-4. Schluesselverwaltung fuer Backup- und Storage-Verschluesselung (Provider-KMS vs. eigenes Vault) inkl. Rotationskonzept ist festzulegen.
-5. Die Default-Aufbewahrungsfristen (Leads 12 Monate, `audit_log` 24 Monate) muessen mit dem Datenschutzbeauftragten und den ersten Mandanten abgestimmt werden.
+Alle offenen Punkte dieses Kapitels sind entschieden oder terminiert (Stand 2026-07-16) — Details im [Entscheidungsprotokoll](13-entscheidungen.md).
+
+1. Cloud-Provider -> **E-45**: Entscheidung bis Ende M2 (Kriterien: EU-Region, Managed PostgreSQL mit PITR, Kosten); bis dahin Entwicklung auf Docker Compose, CloudNativePG bleibt Fallback.
+2. Keycloak-Betrieb -> **E-46**: eigenes Deployment ueber den Keycloak-Operator mit externer PostgreSQL; kein Managed-Keycloak.
+3. Cluster-interner mTLS -> **E-47**: NetworkPolicies-only in Phase 1; Service-Mesh-Bedarf wird nach dem Threat-Model-Review in M3 bewertet.
+4. Schluesselverwaltung -> **E-48**: Provider-KMS fuer Backup- und Storage-Verschluesselung, jaehrliche Rotation; kein eigenes Vault in Phase 1.
+5. Aufbewahrungsfristen -> **E-02/E-20**: Leads 12 Monate nach Disqualifikation, `audit_log` 24 Monate, je Tenant konfigurierbar; juristische Bestaetigung durch den Datenschutzbeauftragten laeuft parallel (vor M3-Abschluss).

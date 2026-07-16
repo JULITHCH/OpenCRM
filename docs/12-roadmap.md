@@ -105,6 +105,7 @@ Der vollstaendige Vertriebsprozess ist abgebildet: vom Lead ueber die automatisc
 | Aktivitaeten | `activities` (CALL/EMAIL/MEETING/NOTE/TASK) mit Verknuepfung zu Lead, Account, Contact, Opportunity; Faelligkeiten und Erledigt-Status | A6 (Datenbasis) |
 | Audit-Log | `audit_log` fuer CREATE/UPDATE/DELETE/ASSIGN/IMPORT/EXPORT/LOGIN mit Diff, Einsicht fuer tenant-admin | A2 |
 | Custom Fields | `custom_field_definitions` plus `custom`-jsonb auf Leads; Validierung nach Feldtyp | - |
+| Staging auf Kubernetes | Aufbau der Staging-Umgebung auf Kubernetes gegen Ende von M2 (Helm-Charts, CD aus GitHub Actions) fuer frueheres Betriebs-Feedback vor M3 (E-49; siehe [11-deployment-und-betrieb.md](11-deployment-und-betrieb.md)) | - |
 
 ### Definition of Done (M2)
 
@@ -132,9 +133,9 @@ Das Produkt wird auswertbar, rechtskonform und betreibbar: Das Verkaeufer-Dashbo
 | Dashboard komplett | Alle KPIs aus [09-dashboard-und-reporting.md](09-dashboard-und-reporting.md): Umsatz, Pipeline-Wert, gewichteter Forecast, Win-Rate, Lead-Conversion, Sales-Cycle, Aktivitaetsvolumen, Reaktionszeit, Leaderboard; `mv_sales_kpis_daily` mit `REFRESH MATERIALIZED VIEW CONCURRENTLY` alle 15 Minuten plus Echtzeit-Queries fuer den laufenden Tag; Sichtbarkeitsregeln je Rolle; Recharts-Frontend mit Filtern (Zeitraum, Team, Verkaeufer, Produkt/Kategorie, Pipeline) | A6 |
 | SLA und Eskalation | Konfigurierbare Reaktionsfristen auf Lead-Zuweisungen; Eskalation (Benachrichtigung, optionale Neuzuweisung) bei Ueberschreitung (siehe [06-lead-management.md](06-lead-management.md)) | A7 |
 | Duplikaterkennung | Dublettenpruefung fuer Leads/Contacts beim Import und bei manueller Anlage (E-Mail exakt, Name/Firma unscharf); Review-Liste statt automatischem Merge | A5 |
-| DSGVO-Auskunft und Loeschung | Auskunftsexport je betroffener Person, Loesch-/Anonymisierungsprozess ueber Soft Delete hinaus, Beruecksichtigung von `gdpr_consent_at` | A5 |
+| DSGVO-Auskunft und Loeschung | Auskunftsexport je betroffener Person; Loeschung als Anonymisierung gemaess der getroffenen Entscheidung E-02 (personenbezogene Felder unwiderruflich ueberschrieben, Default-Fristen je Tenant konfigurierbar) ueber Soft Delete hinaus; Beruecksichtigung von `gdpr_consent_at` | A5 |
 | Mandanten-Self-Service | tenant-admin verwaltet Nutzer(-rollen), Teams, Pipelines, Custom Fields, Zuweisungsregeln und Tenant-Einstellungen ohne Betreiber-Eingriff | A2 |
-| Staging/Prod auf Kubernetes | Helm-Charts, getrennte Umgebungen, CD aus GitHub Actions, Secrets-Handling, Backup/Restore-Konzept umgesetzt und geprobt (siehe [11-deployment-und-betrieb.md](11-deployment-und-betrieb.md)) | - |
+| Produktion auf Kubernetes | Prod-Deployment und Haertung auf Basis der Ende M2 aufgebauten Staging-Umgebung (E-49): Helm-Charts, getrennte Umgebungen, CD aus GitHub Actions, Secrets-Handling, Backup/Restore-Konzept umgesetzt und geprobt (siehe [11-deployment-und-betrieb.md](11-deployment-und-betrieb.md)) | - |
 | Haertung | Lasttest (Richtwert: 50 Tenants, 1 Mio. Leads, 200.000 Opportunities), Query-/Index-Tuning, Rate Limiting, Security-Review inkl. RLS-Penetrationstest, Alerting in Grafana, Runbooks | A1, A2 |
 
 ### Definition of Done (M3)
@@ -231,8 +232,10 @@ Bewusst nicht Teil von M1-M3; grobe Reihenfolge nach erwartetem Nutzen, endguelt
 
 ## Offene Punkte
 
-1. Startdatum und tatsaechliche Teamverfuegbarkeit sind nicht fixiert; die Dauer-Indikationen (8+8+6 Wochen) muessen nach Staffing-Entscheidung in einen konkreten Kalenderplan uebersetzt werden.
-2. Anzahl und Auswahl der Pilot-Mandanten fuer M1/M2 (intern vs. befreundete Kunden) sind offen; davon haengt ab, wie frueh reale Importdateien fuer den Datenqualitaets-Testkorpus verfuegbar sind.
-3. Umfang des externen Security-/RLS-Reviews (nur Design-Review in M1 oder zusaetzlich vollstaendiger Penetrationstest in M3 durch Dritte) ist zu budgetieren.
-4. Ob Staging bereits waehrend M2 auf Kubernetes laeuft (frueheres Betriebs-Feedback, aber DevOps-Aufwand vorgezogen) oder erst in M3 aufgebaut wird, ist zu entscheiden.
-5. Die Abgrenzung der DSGVO-Loeschung (harte Loeschung vs. Anonymisierung bei referenzierten Entitaeten, Aufbewahrungsfristen je Tenant) benoetigt eine fachlich-juristische Klaerung vor M3.
+Alle offenen Punkte dieses Kapitels sind entschieden oder terminiert (Stand 2026-07-16) — Details im [Entscheidungsprotokoll](13-entscheidungen.md).
+
+1. Startdatum und Staffing → **E-50** (terminiert): Der Product Owner fixiert Startdatum und Teamverfuegbarkeit vor M1-Start und leitet aus den Dauer-Indikationen den konkreten Kalenderplan ab.
+2. Pilot-Mandanten → **E-51** (terminiert): Der Product Owner benennt die Pilot-Mandanten bis Ende M1 (reale Importdateien fuer die M2-Datenqualitaetstests).
+3. Umfang des Security-Reviews → **E-52**: internes RLS-Design-Review in M1, externer Penetrationstest in M3; Budget-Freigabe durch den Product Owner bis Ende M2.
+4. Staging-Zeitpunkt → **E-49**: Staging auf Kubernetes wird Ende M2 aufgebaut (frueheres Betriebs-Feedback vor M3).
+5. Abgrenzung der DSGVO-Loeschung → **E-02**: Anonymisierung statt physischer Loeschung mit Default-Fristen ist entschieden; die juristische Bestaetigung laeuft parallel vor M3-Abschluss.

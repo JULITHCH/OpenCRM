@@ -14,7 +14,7 @@ Wir bauen das Frontend als **Single-Page-Application mit React 18 und TypeScript
 
 - Build und Dev-Server mit **Vite** (Dev-Port 5173), Auslieferung als statische Assets aus einem eigenen Docker-Image.
 - **TanStack Query** fuer Server-State (Caching, Invalidierung, Pagination ueber `cursor`/`limit`); Client-State bleibt minimal.
-- **Recharts** fuer die Dashboard-Charts, **react-i18next** fuer de/en.
+- **MUI (Material UI)** als UI-Komponentenbibliothek (E-06), **Recharts** fuer die Dashboard-Charts, **react-i18next** fuer de/en.
 - Anzeige-Konventionen gemaess Baseline: Zeitstempel kommen als UTC von der API und werden in der Nutzer-Zeitzone dargestellt; Betraege mit ISO-4217-Waehrung und Default-Waehrung des Tenants.
 - Rollenbasierte Sichtbarkeit (z. B. Dashboard-Einschraenkungen fuer `sales-rep`) steuert das Backend; die SPA blendet lediglich Navigation und Aktionen anhand der Rollen aus dem Token aus.
 - Login ueber Keycloak mit Authorization Code Flow plus PKCE (public Client `opencrm-web`); die SPA haelt Tokens im Speicher und spricht ausschliesslich die REST-API.
@@ -54,7 +54,9 @@ Rendering direkt aus Spring Boot, kein separates Frontend-Artefakt. Abgelehnt, w
 
 ## Offene Punkte
 
-1. UI-Komponentenbibliothek (z. B. MUI vs. Headless-Ansatz mit eigenem Design-System) ist noch nicht ausgewaehlt.
-2. Token-Ablage-Detail (reines In-Memory mit Silent-Refresh vs. Refresh-Token-Rotation) muss mit dem Keycloak-Setup abgestimmt werden.
-3. E2E-Test-Werkzeug (Playwright vs. Cypress) und Umfang der E2E-Abdeckung sind festzulegen.
-4. Barrierefreiheits-Zielniveau (WCAG 2.1 AA vollstaendig oder pragmatische Teilmenge) ist mit dem Auftraggeber zu klaeren.
+Alle offenen Punkte sind entschieden oder terminiert (Stand 2026-07-16) — Details im [Entscheidungsprotokoll](../13-entscheidungen.md).
+
+1. UI-Komponentenbibliothek → **E-06**: MUI (Material UI).
+2. Token-Ablage → **E-71**: Access-Token nur in-memory, Silent-Refresh, Refresh-Token-Rotation aktiviert.
+3. E2E-Test-Werkzeug → **E-72**: Playwright; Kern-Flows: Login, Lead-Anlage mit Zuweisung, Import-Dry-Run, Dashboard.
+4. Barrierefreiheits-Zielniveau → **E-07**: pragmatisch ab Phase 1; formales WCAG-2.1-AA-Audit erst bei vertraglicher Anforderung.

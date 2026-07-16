@@ -215,7 +215,8 @@ Der Betreiber (Realm-Rolle `platform-admin`) benoetigt mandantenuebergreifende S
 - Mandantenuebergreifende Operationen existieren nur als **dedizierte Admin-Endpunkte** unter `/api/v1/admin/**`, abgesichert ueber die Realm-Rolle `platform-admin` (siehe [10-api-design.md](10-api-design.md)).
 - Diese Endpunkte nutzen eine **separate DataSource mit der Rolle `opencrm_platform_ops`** (`BYPASSRLS`), kleiner eigener HikariCP-Pool, getrennt konfiguriert und getrennt gemonitort.
 - **Jeder** Aufruf eines Admin-Endpunkts erzeugt einen Eintrag in `audit_log` (`actor_id`, `entity_type`, `action`, betroffener Mandant im `diff`), bevor die eigentliche Operation ausgefuehrt wird.
-- Der Funktionsumfang ist bewusst schmal: Tenant-Lifecycle (Abschnitt 8), Quota-Verwaltung, Support-Lesezugriffe. Fachliche CRM-Operationen (Leads bearbeiten usw.) gibt es im Admin-Pfad nicht; fuer Support-Faelle im Mandantenkontext wird ein regulaerer, auditierter Zugang im jeweiligen Mandanten verwendet.
+- Der Funktionsumfang ist bewusst schmal: Tenant-Lifecycle (Abschnitt 8), Quota-Verwaltung, Support-Lesezugriffe. Fachliche CRM-Operationen (Leads bearbeiten usw.) gibt es im Admin-Pfad nicht; fuer Support-Faelle im Mandantenkontext gilt der Support-Zugriff "Assume Tenant" (naechster Punkt).
+- **Support-Zugriff "Assume Tenant" (E-05)**: Ein `platform-admin` startet eine zeitlich begrenzte Support-Session auf den Ziel-Mandanten (max. 4 Stunden, expliziter Grund erforderlich). Alle Aktionen werden im `audit_log` als Support-Zugriff markiert; die tenant-admins des betroffenen Mandanten werden automatisch benachrichtigt. Auch hier gilt: kein RLS-Bypass - der Support-Kontext setzt den Tenant-Kontext regulaer (wie jeder Request des Mandanten) und wird zusaetzlich auditiert.
 
 ## 8. Tenant-Lifecycle
 
@@ -254,12 +255,12 @@ Schlaegt ein Schritt fehl, wird der Vorgang wiederaufgesetzt (Idempotenz ueber `
 
 1. `tenants.status = OFFBOARDING`; Zugriff wie bei Suspendierung gesperrt, Ausnahme: `tenant-admin` kann noch Exporte abrufen.
 2. **Vollexport**: je Entitaetstyp ein `export_jobs`-Lauf (Format `CSV` oder `JSON`) ueber die regulaere Export-Strecke; Bereitstellung als signierte Download-URLs mit `download_expires_at` (siehe [08-import-export.md](08-import-export.md)).
-3. **Loeschfrist**: nach vertraglich vereinbarter Frist (Default 30 Kalendertage, siehe Offene Punkte) endgueltige Loeschung: `DELETE ... WHERE tenant_id = ...` ueber alle Tabellen in FK-sicherer Reihenfolge (Admin-Pfad, auditiert), Loeschen des Objekt-Storage-Prefixes, Loeschen der Keycloak Organization samt Nutzern, zuletzt die `tenants`-Zeile.
+3. **Loeschfrist**: nach vertraglich vereinbarter Frist (Default 30 Kalendertage, bestaetigt in E-21; je Mandant ueber `tenants.settings` anpassbar, juristische Bestaetigung laeuft parallel) endgueltige Loeschung: `DELETE ... WHERE tenant_id = ...` ueber alle Tabellen in FK-sicherer Reihenfolge (Admin-Pfad, auditiert), Loeschen des Objekt-Storage-Prefixes, Loeschen der Keycloak Organization samt Nutzern, zuletzt die `tenants`-Zeile.
 4. Loeschnachweis als `audit_log`-Eintrag (`action = DELETE`, `entity_type = TENANT`) plus Betriebsprotokoll. Backups rotieren gemaess Aufbewahrungsfrist aus [11-deployment-und-betrieb.md](11-deployment-und-betrieb.md); eine gezielte Loeschung einzelner Mandanten aus bestehenden Backups erfolgt nicht (branchenueblich, in AVV zu dokumentieren).
 
 ## 9. Quotas je Plan
 
-Quotas begrenzen Missbrauch und Noisy-Neighbor-Effekte und bilden die kommerziellen Plaene ab. Grenzwerte werden je `tenants.plan` konfiguriert (zentrale Konfiguration, kein Schemaaenderungsbedarf je Plan). Beispielhafte Startwerte - final mit Produktmanagement abzustimmen:
+Quotas begrenzen Missbrauch und Noisy-Neighbor-Effekte und bilden die kommerziellen Plaene ab. Grenzwerte werden je `tenants.plan` konfiguriert (zentrale Konfiguration, kein Schemaaenderungsbedarf je Plan). In Phase 1 ist ausschliesslich der Plan `standard` aktiv (`tenants.plan = 'standard'`): alle Mandanten erhalten dieselben technischen Schutz-Limits, u. a. Import max. 100.000 Zeilen / 50 MB. Die folgende Tabelle beschreibt das Zielbild einer spaeteren Mehrplan-Struktur; verbindliche Werte und Plan-Bezeichnungen legt das Produktmanagement bis Ende M3 fest (E-03):
 
 | Quota | starter | professional | enterprise |
 |---|---|---|---|
@@ -320,7 +321,9 @@ WHERE c.relkind = 'r'
 
 ## Offene Punkte
 
-1. **Loeschfristen beim Offboarding**: Default 30 Kalendertage ist ein Platzhalter; endgueltige Frist und Umgang mit Backup-Aufbewahrung sind juristisch (AVV/DSGVO) zu bestaetigen.
-2. **Quota-Grenzwerte und Plan-Namen**: Die Tabelle in Abschnitt 9 ist ein technischer Vorschlag; verbindliche Werte und Plan-Bezeichnungen legt das Produktmanagement fest.
-3. **Skalierungsschwelle**: Ab welcher Mandanten-/Datenmenge wird Partitionierung nach `tenant_id` (deklarative Partitionen) oder Sharding evaluiert? Vorschlag: Review bei > 50 Mio. Zeilen in `activities` oder > 500 aktiven Mandanten.
-4. **Ablage mandantenspezifischer Einstellungen** (z. B. Claim-Selbstzuweisung aus [06-lead-management.md](06-lead-management.md)): Erweiterung der Tabelle `tenants` um eine `settings jsonb`-Spalte vs. eigene Tabelle `tenant_settings` - zu entscheiden mit dem Datenmodell-Team.
+Alle offenen Punkte dieses Kapitels sind entschieden oder terminiert (Stand 2026-07-16) — Details im [Entscheidungsprotokoll](13-entscheidungen.md).
+
+1. **Loeschfrist beim Offboarding** → **E-21**: Default 30 Kalendertage bestaetigt; juristische Bestaetigung laeuft parallel, Frist je Mandant ueber `tenants.settings` anpassbar.
+2. **Quotas/Plaene** → **E-03**: ein Standard-Plan in Phase 1 (`tenants.plan = 'standard'`), gleiche technische Limits fuer alle Mandanten; Tarif-Differenzierung entscheidet das Produktmanagement bis Ende M3.
+3. **Skalierungsschwelle** → **E-22**: bestaetigt - Review ab > 50 Mio. Zeilen in `activities` oder > 500 aktiven Mandanten.
+4. **Einstellungs-Ablage** → **E-12**: `tenants.settings jsonb` an der Tabelle `tenants`; keine eigene Tabelle `tenant_settings`.

@@ -47,7 +47,7 @@ Abweichungen (z. B. `tenants` ohne `tenant_id`, `audit_log` mit `occurred_at` st
 
 ## 2. ER-Diagramm der Kernentitäten
 
-Aus Gründen der Lesbarkeit sind die `tenant_id`-Beziehungen nur für `users` und `teams` eingezeichnet; tatsächlich referenziert jede mandantenbezogene Tabelle `tenants`. Die Job- und Konfigurationstabellen (`import_jobs`, `export_jobs`, `import_mappings`, `import_job_errors`, `custom_field_definitions`, `audit_log`) sind im Katalog beschrieben, aber hier nicht dargestellt.
+Aus Gründen der Lesbarkeit sind die `tenant_id`-Beziehungen nur für `users` und `teams` eingezeichnet; tatsächlich referenziert jede mandantenbezogene Tabelle `tenants`. Die Job-, Konfigurations- und Benachrichtigungstabellen (`import_jobs`, `export_jobs`, `import_mappings`, `import_job_errors`, `custom_field_definitions`, `audit_log`, `notifications`, `round_robin_pointers`) sind im Katalog beschrieben, aber hier nicht dargestellt.
 
 ```mermaid
 erDiagram
@@ -62,6 +62,7 @@ erDiagram
     users ||--o{ lead_assignments : "is assigned"
     assignment_rules |o--o{ lead_assignments : "produced by rule"
     price_lists ||--o{ price_list_items : "contains"
+    price_lists |o--o{ accounts : "applies to"
     products ||--o{ price_list_items : "priced in"
     pipelines ||--o{ pipeline_stages : "consists of"
     accounts ||--o{ opportunities : "has"
@@ -110,6 +111,7 @@ erDiagram
         text name
         text industry
         uuid owner_id FK
+        uuid price_list_id FK
     }
     contacts {
         uuid id PK
@@ -244,6 +246,7 @@ Stammdaten der Kunden-Organisationen. Einzige fachliche Tabelle **ohne** `tenant
 | status | text | NOT NULL, CHECK IN (ACTIVE, SUSPENDED, OFFBOARDING) | Lebenszyklus des Mandanten |
 | plan | text | NOT NULL | Gebuchter Plan (Abrechnung/Feature-Gates) |
 | default_currency | char(3) | NOT NULL | ISO-4217-Default für neue Produkte/Opportunities |
+| settings | jsonb | NOT NULL DEFAULT '{}' | Mandantenspezifische Einstellungen, u. a. Claim-Selbstzuweisung, SLA-Frist, Duplikat-Schwellen, Aufbewahrungsfristen (E-12) |
 | created_at | timestamptz | NOT NULL DEFAULT now() | Anlagezeitpunkt |
 
 ### 3.2 users
@@ -275,6 +278,7 @@ Vertriebsteams eines Mandanten; Ziel von Zuweisungsregeln und Filterdimension im
 | team_id | uuid | PK-Teil, FK → teams(id) ON DELETE CASCADE | Team |
 | user_id | uuid | PK-Teil, FK → users(id) | Mitglied |
 | is_lead | bool | NOT NULL DEFAULT false | Teamleitung (fachlich, keine Berechtigung) |
+| is_primary | bool | NOT NULL DEFAULT false, UNIQUE-Index (user_id) WHERE is_primary | Primärteam des Nutzers (genau eines je Nutzer); Basis der Team-Zuordnung im Dashboard (E-19) |
 
 ### 3.4 accounts
 
@@ -288,6 +292,8 @@ Firmenkunden (B2B-Konten). Kernentität mit Soft Delete.
 | street / postal_code / city | text | NULL | Adresse |
 | country | char(2) | NULL | ISO 3166-1 alpha-2 |
 | owner_id | uuid | NULL, FK → users(id) | Verantwortlicher Verkäufer |
+| price_list_id | uuid | NULL, FK → price_lists(id) | Optionale Preisliste des Accounts, genau eine je Account (E-10) |
+| external_id | text | NULL, UNIQUE (tenant_id, external_id) WHERE external_id IS NOT NULL | Stabiler externer Schlüssel für Import/Integration; bevorzugter Match-Schlüssel (E-11) |
 
 ### 3.5 contacts
 
@@ -300,6 +306,7 @@ Ansprechpersonen eines Accounts. Kernentität mit Soft Delete; personenbezogen u
 | email / phone | text | NULL | Kontaktdaten |
 | position | text | NULL | Funktion im Unternehmen |
 | gdpr_consent_at | timestamptz | NULL | Zeitpunkt der Einwilligung (z. B. Marketingkontakt); NULL = keine Einwilligung |
+| external_id | text | NULL, UNIQUE (tenant_id, external_id) WHERE external_id IS NOT NULL | Stabiler externer Schlüssel für Import/Integration; bevorzugter Match-Schlüssel (E-11) |
 
 ### 3.6 leads
 
@@ -311,11 +318,13 @@ Unqualifizierte Verkaufskontakte; Lebenszyklus und Konvertierung sind in [06-lea
 | company_name | text | NULL, CHECK: company_name oder last_name gesetzt | Firmenname |
 | first_name / last_name | text | NULL | Ansprechperson |
 | email / phone | text | NULL | Kontaktdaten (Dublettenprüfung beim Import) |
+| external_id | text | NULL, UNIQUE (tenant_id, external_id) WHERE external_id IS NOT NULL | Stabiler externer Schlüssel für Import/Integration; bevorzugter Match-Schlüssel (E-11) |
 | source | text | NOT NULL, CHECK IN (WEB_FORM, IMPORT, MANUAL, API, EVENT, REFERRAL) | Herkunft |
 | status | text | NOT NULL DEFAULT NEW, CHECK IN (NEW, ASSIGNED, CONTACTED, QUALIFIED, DISQUALIFIED, CONVERTED) | Lebenszyklus |
 | score | int | NOT NULL DEFAULT 0, CHECK 0–100 | Lead-Score |
 | owner_id | uuid | NULL, FK → users(id) | Zugewiesener Verkäufer; NULL solange status = NEW |
 | disqualified_reason | text | NULL | Pflicht bei DISQUALIFIED (App-Validierung) |
+| converted_at / disqualified_at | timestamptz | NULL | Gesetzt beim Statusübergang nach CONVERTED bzw. DISQUALIFIED (E-09); Basis der Lead-Conversion-KPI |
 | converted_account_id | uuid | NULL, FK → accounts(id) | Ergebnis der Konvertierung |
 | converted_contact_id | uuid | NULL, FK → contacts(id) | Ergebnis der Konvertierung |
 | converted_opportunity_id | uuid | NULL, FK → opportunities(id) | Ergebnis der Konvertierung (FK per ALTER TABLE, zirkulär) |
@@ -360,9 +369,10 @@ Produktkatalog je Mandant. Kernentität mit Soft Delete; `active = false` bedeut
 | category | text | NULL | Kategorie (Dashboard-Filter) |
 | unit | text | NULL | Mengeneinheit (Stück, Stunde, Lizenz …) |
 | list_price | numeric(12,2) | NOT NULL, CHECK >= 0 | Listenpreis |
-| currency | char(3) | NOT NULL | ISO 4217 |
+| currency | char(3) | NOT NULL | ISO 4217; muss in Phase 1 der Default-Währung des Tenants entsprechen (E-01, Durchsetzung im Service-Layer) |
 | tax_rate | numeric(5,2) | NOT NULL DEFAULT 0 | Steuersatz in Prozent |
 | active | bool | NOT NULL DEFAULT true | Verkäuflichkeit |
+| external_id | text | NULL, UNIQUE (tenant_id, external_id) WHERE external_id IS NOT NULL | Stabiler externer Schlüssel für Import/Integration; bevorzugter Match-Schlüssel (E-11) |
 
 ### 3.10 price_lists und price_list_items
 
@@ -407,7 +417,7 @@ Vertriebsprozesse je Mandant; genau eine Default-Pipeline (partieller Unique-Ind
 
 ### 3.12 opportunities
 
-Verkaufschancen. Kernentität mit Soft Delete. `amount` ist die denormalisierte Summe der Positionen (`opportunity_items`), gepflegt durch die Anwendung in derselben Transaktion wie jede Positionsänderung.
+Verkaufschancen. Kernentität mit Soft Delete. `amount` ist die denormalisierte Summe der Positionen (`opportunity_items`), gepflegt durch die Anwendung in derselben Transaktion wie jede Positionsänderung; ohne Positionen darf `amount` ein manueller Schätzbetrag sein (`is_estimated = true`, E-14).
 
 | Spalte | Typ | Constraints | Beschreibung |
 |---|---|---|---|
@@ -415,8 +425,9 @@ Verkaufschancen. Kernentität mit Soft Delete. `amount` ist die denormalisierte 
 | pipeline_id | uuid | NOT NULL, FK → pipelines(id) | Vertriebsprozess |
 | stage_id | uuid | NOT NULL, FK → pipeline_stages(id) | Aktuelle Stage (App validiert Zugehörigkeit zur Pipeline) |
 | name | text | NOT NULL | Bezeichnung |
-| amount | numeric(14,2) | NOT NULL DEFAULT 0 | Denormalisierte Positionssumme |
-| currency | char(3) | NOT NULL | ISO 4217, Default aus tenants.default_currency |
+| amount | numeric(14,2) | NOT NULL DEFAULT 0 | Denormalisierte Positionssumme; ohne Positionen manueller Schätzbetrag (E-14) |
+| is_estimated | bool | NOT NULL DEFAULT false | true, solange `amount` ein manueller Schätzbetrag ohne Positionen ist; die erste Position setzt `amount` aus der Positionsberechnung und `is_estimated = false` (E-14) |
+| currency | char(3) | NOT NULL | ISO 4217, Default aus tenants.default_currency; muss in Phase 1 dem Tenant-Default entsprechen (E-01, Durchsetzung im Service-Layer) |
 | expected_close_date | date | NULL | Erwarteter Abschluss |
 | owner_id | uuid | NOT NULL, FK → users(id) | Verantwortlicher Verkäufer |
 | lead_id | uuid | NULL, FK → leads(id) | Ursprungs-Lead bei Konvertierung |
@@ -529,6 +540,27 @@ Revisionssicheres, append-only Protokoll fachlicher Aktionen (Abschnitt 8). Abwe
 | diff | jsonb | NULL | Geänderte Felder als `{"field": {"old": ..., "new": ...}}`; bei IMPORT/EXPORT Job-Metadaten |
 | occurred_at | timestamptz | NOT NULL DEFAULT now() | Ereigniszeitpunkt |
 
+### 3.19 notifications
+
+In-App-Benachrichtigungen (Zuweisung, SLA-Eskalation, ab M2 Import-/Export-Abschluss); die SPA pollt ungelesene Einträge per Intervall (Ablauf in [06-lead-management.md](06-lead-management.md)). Strukturgleich zur Definition in Kapitel 06, ins kanonische Modell aufgenommen (E-13). Abweichend von den Standardspalten: kein `updated_at`/`deleted_at`. RLS-Policy wie üblich auf `tenant_id`.
+
+| Spalte | Typ | Constraints | Beschreibung |
+|---|---|---|---|
+| user_id | uuid | NOT NULL, FK → users(id) | Empfänger |
+| type | text | NOT NULL | Ereignistyp (z. B. LEAD_ASSIGNED, SLA_ESCALATION, IMPORT_COMPLETED) |
+| payload | jsonb | NOT NULL | Anzeigedaten der Benachrichtigung (Titel, Text, Bezugsobjekt) |
+| read_at | timestamptz | NULL | Lesezeitpunkt; NULL = ungelesen |
+
+### 3.20 round_robin_pointers
+
+Persistenter Round-Robin-Zuweisungszeiger je Team; die Zeigerzeile wird bei der Zuweisung per `SELECT ... FOR UPDATE` gesperrt (Algorithmus in [06-lead-management.md](06-lead-management.md)). Strukturgleich zur Definition in Kapitel 06, ins kanonische Modell aufgenommen (E-13). Abweichend von den Standardspalten: kein `created_at`/`deleted_at`. RLS-Policy wie üblich auf `tenant_id`.
+
+| Spalte | Typ | Constraints | Beschreibung |
+|---|---|---|---|
+| team_id | uuid | NOT NULL, FK → teams(id), UNIQUE (tenant_id, team_id) | Team; genau ein Zeiger je Team und Tenant |
+| last_user_id | uuid | NULL, FK → users(id) | Zuletzt zugewiesenes Mitglied; darf auf ein inaktives oder ausgeschiedenes Mitglied zeigen |
+| updated_at | timestamptz | NOT NULL DEFAULT now() | Letzte Fortschreibung des Zeigers |
+
 ## 4. Index-Strategie
 
 Grundregeln:
@@ -547,12 +579,13 @@ Wichtigste Indizes je Tabelle (nicht abschließend; konkrete DDL für leads/oppo
 | Tabelle | Index | Zweck |
 |---|---|---|
 | users | UNIQUE (keycloak_id); (tenant_id, email) | JIT-Lookup beim Login; Nutzersuche |
-| accounts | (tenant_id, owner_id) WHERE deleted_at IS NULL; GIN (name gin_trgm_ops) | Meine Accounts; Namenssuche |
-| contacts | (tenant_id, account_id) WHERE deleted_at IS NULL; (tenant_id, email); GIN (last_name gin_trgm_ops) | Kontakte je Account; Dubletten; Suche |
+| team_members | UNIQUE (user_id) WHERE is_primary | Genau ein Primärteam je Nutzer (E-19) |
+| accounts | (tenant_id, owner_id) WHERE deleted_at IS NULL; GIN (name gin_trgm_ops); UNIQUE (tenant_id, external_id) WHERE external_id IS NOT NULL | Meine Accounts; Namenssuche; Import-Match (E-11) |
+| contacts | (tenant_id, account_id) WHERE deleted_at IS NULL; (tenant_id, email); GIN (last_name gin_trgm_ops); UNIQUE (tenant_id, external_id) WHERE external_id IS NOT NULL | Kontakte je Account; Dubletten; Suche; Import-Match (E-11) |
 | leads | siehe Abschnitt 5 | — |
 | lead_assignments | (tenant_id, lead_id, assigned_at DESC); (tenant_id, assigned_to, assigned_at DESC) | Historie je Lead; Reaktionszeit-KPI |
 | assignment_rules | (tenant_id, active, priority) | Regelauswertung in Prioritätsreihenfolge |
-| products | UNIQUE (tenant_id, sku) WHERE deleted_at IS NULL; (tenant_id, category, active); GIN (name gin_trgm_ops) | SKU-Eindeutigkeit; Katalogfilter; Suche |
+| products | UNIQUE (tenant_id, sku) WHERE deleted_at IS NULL; (tenant_id, category, active); GIN (name gin_trgm_ops); UNIQUE (tenant_id, external_id) WHERE external_id IS NOT NULL | SKU-Eindeutigkeit; Katalogfilter; Suche; Import-Match (E-11) |
 | price_list_items | UNIQUE (price_list_id, product_id) | Ein Preis je Produkt und Liste |
 | pipelines | UNIQUE (tenant_id, name); UNIQUE (tenant_id) WHERE is_default | Genau eine Default-Pipeline |
 | pipeline_stages | UNIQUE (pipeline_id, sort_order) | Board-Reihenfolge |
@@ -563,6 +596,8 @@ Wichtigste Indizes je Tabelle (nicht abschließend; konkrete DDL für leads/oppo
 | import_job_errors | (import_job_id, row_number) | Fehlerreport je Job |
 | custom_field_definitions | UNIQUE (tenant_id, entity_type, field_key) | Schlüsseleindeutigkeit |
 | audit_log | (tenant_id, entity_type, entity_id, occurred_at DESC); (tenant_id, actor_id, occurred_at DESC); BRIN (occurred_at) | Objekt-Historie; Akteurssicht; Zeitraumscans günstig |
+| notifications | (tenant_id, user_id, created_at DESC) WHERE read_at IS NULL | Ungelesene Benachrichtigungen (Polling-Query) |
+| round_robin_pointers | UNIQUE (tenant_id, team_id) | Genau ein Zeiger je Team |
 
 ## 5. Beispiel-DDL: leads, opportunities, opportunity_items
 
@@ -594,6 +629,7 @@ CREATE TABLE leads (
     last_name                text,
     email                    text,
     phone                    text,
+    external_id              text,
     source                   text          NOT NULL
         CHECK (source IN ('WEB_FORM','IMPORT','MANUAL','API','EVENT','REFERRAL')),
     status                   text          NOT NULL DEFAULT 'NEW'
@@ -602,6 +638,8 @@ CREATE TABLE leads (
         CHECK (score BETWEEN 0 AND 100),
     owner_id                 uuid          REFERENCES users (id),
     disqualified_reason      text,
+    converted_at             timestamptz,
+    disqualified_at          timestamptz,
     converted_account_id     uuid          REFERENCES accounts (id),
     converted_contact_id     uuid          REFERENCES contacts (id),
     converted_opportunity_id uuid,         -- FK folgt nach CREATE TABLE opportunities
@@ -647,6 +685,10 @@ CREATE INDEX idx_leads_tenant_email                        -- Dublettenpruefung 
     ON leads (tenant_id, email)
     WHERE deleted_at IS NULL;
 
+CREATE UNIQUE INDEX uq_leads_tenant_external_id            -- Import-Match-Schluessel (E-11)
+    ON leads (tenant_id, external_id)
+    WHERE external_id IS NOT NULL;
+
 CREATE INDEX idx_leads_custom_gin
     ON leads USING gin (custom jsonb_path_ops);
 
@@ -665,6 +707,7 @@ CREATE TABLE opportunities (
     stage_id            uuid           NOT NULL REFERENCES pipeline_stages (id),
     name                text           NOT NULL,
     amount              numeric(14,2)  NOT NULL DEFAULT 0,
+    is_estimated        boolean        NOT NULL DEFAULT false,
     currency            char(3)        NOT NULL,
     expected_close_date date,
     owner_id            uuid           NOT NULL REFERENCES users (id),
@@ -787,7 +830,7 @@ Hinweis: `current_setting('app.current_tenant', true)` liefert `NULL` statt eine
 - **Was wird geloggt:** Alle schreibenden fachlichen Aktionen auf Kernentitäten (CREATE, UPDATE, DELETE inkl. Soft Delete), jede Lead-Zuweisung (ASSIGN, zusätzlich zur Fachhistorie in `lead_assignments`), Start und Abschluss von Import-/Export-Jobs (IMPORT, EXPORT, mit Job-Metadaten in `diff`) sowie Logins (LOGIN, im Rahmen der JIT-Provisionierung). Reine Lesezugriffe werden nicht geloggt.
 - **Wie:** Das Backend schreibt den Eintrag in derselben Transaktion wie die fachliche Änderung (Modul `shared`, aufgerufen aus den Domänen-Services) – kein DB-Trigger, damit `actor_id` und fachlicher Kontext verfügbar sind. `diff` enthält nur geänderte Felder mit Alt-/Neuwert; als sensibel markierte Felder werden maskiert.
 - **Schutz:** append-only. `opencrm_app` erhält nur `INSERT` und `SELECT`; `UPDATE`/`DELETE` sind nicht gegrantet. RLS wie üblich auf `tenant_id`, damit `tenant-admin` nur das eigene Protokoll sieht; `platform-admin`-Zugriffe laufen über einen separaten, mandantenübergreifenden Betriebszugang ([04-multi-tenancy.md](04-multi-tenancy.md)).
-- **Aufbewahrung:** Entwurf 24 Monate online, danach Archivierung als Export in den Objekt-Storage und Löschung aus der Tabelle (nach Partitionierung: `DROP PARTITION`). Die Frist ist je nach Kundenanforderung zu bestätigen (siehe Offene Punkte).
+- **Aufbewahrung:** 24 Monate online (entschieden, E-20), je Tenant über `tenants.settings` konfigurierbar (E-12); danach Archivierung als Export in den Objekt-Storage und Löschung aus der Tabelle (nach Partitionierung: `DROP PARTITION`).
 - **Abgrenzung:** `audit_log` ist ein fachliches Protokoll, kein Ersatz für strukturierte Logs/Traces der Observability-Pipeline ([11-deployment-und-betrieb.md](11-deployment-und-betrieb.md)).
 
 ## 9. Mengengerüst und Partitionierungs-Ausblick
@@ -817,8 +860,10 @@ Konsequenzen:
 
 ## 10. Offene Punkte
 
-1. **Aufbewahrungsfrist `audit_log`:** Entwurf 24 Monate; rechtliche und vertragliche Anforderungen der Zielkunden (u. a. DSGVO-Rechenschaftspflicht vs. Datenminimierung) sind zu prüfen und ggf. je Tenant konfigurierbar zu machen.
-2. **`accounts.owner_id` verpflichtend?** Aktuell nullable (Accounts können ohne Verantwortlichen importiert werden); Entscheidung nötig, ob ein Default-Owner erzwungen wird.
-3. **E-Mail-Eindeutigkeit bei `leads`/`contacts`:** bewusst kein UNIQUE-Constraint (Dubletten werden über `duplicate_strategy` beim Import und UI-Warnungen behandelt); zu bestätigen, ob einzelne Tenants harte Eindeutigkeit fordern.
-4. **`custom`-Spalte für weitere Entitäten:** Phase 1 nur `leads`; Zeitpunkt und Reihenfolge der Erweiterung auf accounts/contacts/products ist mit dem Produktmanagement abzustimmen.
-5. **Währungsabweichung je Opportunity:** `opportunities.currency` darf vom Tenant-Default abweichen; die Umrechnungslogik für aggregierte KPIs (Kurstabelle, Stichtagskurs) ist noch nicht entschieden und blockiert Teile von [09-dashboard-und-reporting.md](09-dashboard-und-reporting.md).
+Alle offenen Punkte dieses Kapitels sind entschieden (Stand 2026-07-16) — Details im [Entscheidungsprotokoll](13-entscheidungen.md).
+
+- Punkt 1 (Aufbewahrungsfrist `audit_log`) → **E-20/E-02**: 24 Monate Default, je Tenant über `tenants.settings` konfigurierbar; vor Löschung Archiv-Export in den Objekt-Storage.
+- Punkt 2 (`accounts.owner_id` verpflichtend?) → **E-15**: bleibt nullable; beim Import kann optional ein Default-Owner je Import-Job gesetzt werden.
+- Punkt 3 (E-Mail-Eindeutigkeit bei `leads`/`contacts`) → **E-16**: kein UNIQUE-Constraint (bleibt); Dubletten über Import-Strategie und UI-Warnungen.
+- Punkt 4 (`custom`-Spalte für weitere Entitäten) → **E-17**: Phase 1 nur `leads`; Erweiterung auf accounts/contacts/products ist Backlog.
+- Punkt 5 (Währungsabweichung je Opportunity) → **E-01**: eine Währung je Mandant in Phase 1; `opportunities.currency` entspricht dem Tenant-Default.

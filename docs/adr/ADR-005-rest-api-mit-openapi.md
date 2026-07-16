@@ -54,7 +54,9 @@ Schneller Start ohne OpenAPI-Pflege. Abgelehnt, weil ohne maschinenlesbaren Vert
 
 ## Offene Punkte
 
-1. Rate-Limiting-Strategie fuer den Service-Client (je Tenant, je Client) ist noch nicht festgelegt.
-2. Umfang von `include`-Parametern vs. dedizierten Compound-Endpunkten wird erst nach ersten SPA-Messungen entschieden.
-3. Ob Webhooks fuer Partner (z. B. "Lead konvertiert") in Phase 2 dazukommen, ist offen (siehe [12-roadmap.md](../12-roadmap.md)).
-4. Deprecation-Policy fuer `/api/v1` (Ankuendigungsfristen, `Sunset`-Header) muss vor dem ersten externen Partner definiert sein.
+Alle offenen Punkte sind entschieden oder terminiert (Stand 2026-07-16) — Details im [Entscheidungsprotokoll](../13-entscheidungen.md).
+
+1. Rate-Limiting Service-Client → **E-39**: 600 Requests/min je Client; Durchsetzung im Backend.
+2. `include`-Parameter vs. Compound-Endpunkte → **E-65**: keine `include`-Parameter zum v1-Start; Compound-Endpunkte erst nach SPA-Messungen in M2.
+3. Webhooks → **E-66**: ja, als Ausbaustufe nach M3 mit HMAC-Signatur.
+4. Deprecation-Policy → **E-67**: 6 Monate Ankuendigungsfrist, `Deprecation`-/`Sunset`-Header; verbindlich dokumentiert vor dem ersten externen Partner.

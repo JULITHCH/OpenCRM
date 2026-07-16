@@ -58,5 +58,7 @@ Etwa PostgreSQL fuer Fachdaten plus eine Suchmaschine/Dokumenten-DB fuer Custom 
 
 ## Offene Punkte
 
-1. Partitionierungsstrategie fuer wachstumsstarke Tabellen (`activities`, `audit_log`) ist noch nicht entschieden (Zeit- vs. Tenant-Partitionierung).
-2. Zielwerte fuer Connection-Pool-Groesse und `work_mem` unter RLS-Last muessen in Lasttests ermittelt werden.
+Alle offenen Punkte sind entschieden oder terminiert (Stand 2026-07-16) — Details im [Entscheidungsprotokoll](../13-entscheidungen.md).
+
+1. Partitionierungsstrategie → **E-55**: zeitbasierte Range-Partitionierung (monatlich) fuer `activities` und `audit_log`; Aktivierung erst ab Schwellwert E-22, keine Vorab-DDL in M1.
+2. Connection-Pool-Groesse und `work_mem` → **E-56**: Lasttest in M2; bis dahin HikariCP-Default mit max. 20 Connections je Instanz.

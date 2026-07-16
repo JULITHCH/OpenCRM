@@ -56,6 +56,8 @@ Shared Schema, Isolation ausschliesslich ueber `WHERE tenant_id = ?` im Anwendun
 
 ## Offene Punkte
 
-1. Verfahren fuer Einzel-Tenant-Export/-Restore (Offboarding, Datenpannen-Fall) muss als Runbook ausgearbeitet werden.
-2. Grenzwerte, ab denen ein Grosskunde auf eine dedizierte Instanz umzieht, sind nicht definiert.
-3. Ob `pg_stat_statements`-Auswertung je Tenant (Label ueber `application_name` o. ae.) umgesetzt wird, ist offen.
+Alle offenen Punkte sind entschieden oder terminiert (Stand 2026-07-16) — Details im [Entscheidungsprotokoll](../13-entscheidungen.md).
+
+1. Einzel-Tenant-Export/-Restore-Runbook → **E-57**: wird in M3 erstellt.
+2. Grenzwerte fuer dedizierte Instanz → **E-58**: ein Tenant verursacht > 20 % der Plattformlast ueber 30 Tage oder vertragliche Anforderung.
+3. `pg_stat_statements` je Tenant → **E-59**: nein in Phase 1; Tenant-Zuordnung erfolgt ueber OpenTelemetry-Traces.

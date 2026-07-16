@@ -56,6 +56,8 @@ Technisch ebenbuertiger, moderner Stack mit gutem PostgreSQL-Support (Npgsql, EF
 
 ## Offene Punkte
 
-1. Ob `importexport` als zweites Deployment desselben Images (Worker-Profil) betrieben wird, sobald Importlast stoert, ist noch nicht entschieden.
-2. Einsatz von Virtual Threads fuer Request-Verarbeitung (Tomcat-Konfiguration) muss unter RLS-/Pool-Verhalten getestet werden.
-3. Verbindlichkeit der Spring-Modulith-Verifikation (Build-Fehler vs. Warnung) in der CI ist festzulegen.
+Alle offenen Punkte sind entschieden oder terminiert (Stand 2026-07-16) — Details im [Entscheidungsprotokoll](../13-entscheidungen.md).
+
+1. Worker-Deployment → **E-62**: Spring-Profile `web`/`worker` von Beginn an vorgesehen; separates Worker-Deployment erst bei Bedarf.
+2. Virtual Threads → **E-63**: in M1 deaktiviert; Test unter RLS-/Pool-Last in M2.
+3. Modulith-Verifikation → **E-64**: Build-Fehler, strikt ab M1.

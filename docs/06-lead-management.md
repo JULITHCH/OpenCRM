@@ -100,7 +100,7 @@ Claim (falls aktiviert): `POST /api/v1/leads/{id}/claim` ohne Body; nur zulaessi
 
 ### 3.2 Round-Robin je Team
 
-Round-Robin verteilt Leads reihum an die aktiven Mitglieder eines Teams. Der Zeiger ist persistent, damit die Verteilung Neustarts und parallele Instanzen uebersteht. Dafuer fuehrt das Modul `lead` eine ergaenzende Tabelle:
+Round-Robin verteilt Leads reihum an die aktiven Mitglieder eines Teams. Der Zeiger ist persistent, damit die Verteilung Neustarts und parallele Instanzen uebersteht. Dafuer nutzt das Modul `lead` die Tabelle `round_robin_pointers`, die Teil des kanonischen Datenmodells ist (E-13, siehe [03-datenmodell.md](03-datenmodell.md)):
 
 ```sql
 CREATE TABLE round_robin_pointers (
@@ -244,6 +244,8 @@ Beispiel 3 - Messe- und Empfehlungs-Leads an das Field-Sales-Team:
 
 Fallback: Matcht keine Regel, wird der Lead per Round-Robin dem Default-Team des Tenants zugewiesen (Tenant-Einstellung `default_team_id`). Ist kein Default-Team konfiguriert oder hat es keine aktiven Mitglieder, bleibt der Lead in `NEW` und der tenant-admin wird benachrichtigt. Zeigt `target_id` einer Regel auf einen inaktiven Nutzer (`DIRECT`), wird die Regel uebersprungen und die naechste ausgewertet.
 
+Manueller Re-Run (E-27): Die Regeln laufen automatisch ausschliesslich bei der Anlage; Feldaenderungen (z. B. ein Score-Update) loesen keinen erneuten Lauf aus. Stattdessen gibt es `POST /api/v1/leads/{id}/reapply-rules` fuer einzelne Leads sowie eine Bulk-Variante fuer Leads im Status `NEW` (Endpunkt-Details siehe [10-api-design.md](10-api-design.md)).
+
 ## 4. Neuzuweisung und Zuweisungshistorie
 
 - Neuzuweisung erfolgt ueber denselben Endpunkt `POST /api/v1/leads/{id}/assign`; berechtigt sind sales-manager und tenant-admin. Ein sales-rep kann Leads nicht an andere abgeben (nur der Manager verteilt um).
@@ -354,7 +356,7 @@ ORDER BY score DESC
 LIMIT 5;
 ```
 
-Schwellenwerte (je Tenant konfigurierbar, Defaults):
+Schwellenwerte (Defaults; je Tenant ueber `tenants.settings` uebersteuerbar, E-28/E-12; Validierung mit realen Pilotdaten in M2):
 
 | Score | Verhalten |
 |---|---|
@@ -377,7 +379,7 @@ Ausloeser im Lead-Kontext:
 
 Technik (Phase 1, ohne Broker):
 
-- In-App: Persistente Zeilen in einer modulinternen Tabelle `notifications(id, tenant_id, user_id, type, payload jsonb, read_at, created_at)`; die SPA pollt `GET /api/v1/notifications?unread=true` per TanStack Query (Intervall 60 Sekunden) und zeigt ein Badge. Kein WebSocket/SSE in Phase 1.
+- In-App: Persistente Zeilen in der Tabelle `notifications(id, tenant_id, user_id, type, payload jsonb, read_at, created_at)` - Teil des kanonischen Datenmodells (E-13, siehe [03-datenmodell.md](03-datenmodell.md)); die SPA pollt `GET /api/v1/notifications?unread=true` per TanStack Query (Intervall 60 Sekunden) und zeigt ein Badge. Kein WebSocket/SSE in Phase 1.
 - E-Mail: Versand ueber Spring Mail/SMTP mit mandantenspezifischem Absendernamen; Templates zweisprachig de/en analog zur Frontend-Lokalisierung.
 - Versand strikt nach Transaktions-Commit (`@TransactionalEventListener(phase = AFTER_COMMIT)`), damit keine Benachrichtigung fuer zurueckgerollte Zuweisungen entsteht. Fehlgeschlagener E-Mail-Versand blockiert die Zuweisung nicht (Retry mit Backoff, Fehler-Log).
 - Nutzer koennen E-Mail-Benachrichtigungen je Ereignistyp in ihrem Profil deaktivieren; In-App-Benachrichtigungen sind immer aktiv.
@@ -409,8 +411,10 @@ Durchsetzung: grob ueber Spring-Security-Rollenpruefung am Endpunkt, fein (Sicht
 
 ## Offene Punkte
 
-1. Team-Zuordnung von sales-managern fuer die Sichtbarkeit "Team": Genuegt `team_members.is_lead = true` als Kriterium, oder braucht ein Manager Sicht auf mehrere Teams? Entscheidung gemeinsam mit Modul `identity`.
-2. Soll die Regel-Engine bei Aenderung eines noch nicht zugewiesenen Leads (Status `NEW`) erneut laufen (z. B. nach Score-Update), oder ausschliesslich einmalig bei Anlage?
-3. Schwellenwerte der Duplikaterkennung (0.40/0.85) sind Startwerte; Validierung mit realen Firmennamensdaten eines Pilotmandanten steht aus.
-4. SLA-Fristen: Kalenderstunden vs. Geschaeftszeiten des Tenants (Wochenenden/Feiertage). Phase 1 rechnet in Kalenderstunden; Geschaeftszeitenmodell waere eine Tenant-Einstellung mit spuerbarer Komplexitaet.
-5. Benachrichtigungs-Polling (60 Sekunden) vs. SSE: Bei vielen gleichzeitigen Nutzern koennte Polling die API unnoetig belasten; Entscheidung nach Lasttest in [11-deployment-und-betrieb.md](11-deployment-und-betrieb.md) dokumentieren.
+Alle offenen Punkte dieses Kapitels sind entschieden oder terminiert (Stand 2026-07-16) — Details im [Entscheidungsprotokoll](13-entscheidungen.md).
+
+1. **Manager mehrerer Teams** → **E-26**: Kriterium bleibt `team_members.is_lead = true`; ein Manager kann in mehreren Teams `is_lead` sein und sieht die Vereinigungsmenge dieser Teams.
+2. **Regel-Engine-Trigger** → **E-27**: Regeln laufen nur bei Lead-Anlage; manueller Re-Run ueber `POST /api/v1/leads/{id}/reapply-rules` inkl. Bulk-Variante fuer Status `NEW` (Abschnitt 3.3).
+3. **Duplikat-Schwellen** → **E-28**: Startwerte 0.40/0.85 bleiben, je Tenant ueber `tenants.settings` uebersteuerbar; Validierung mit realen Pilotdaten in M2.
+4. **SLA-Zeitbasis** → **E-29**: Kalenderstunden sind fuer Phase 1 final; Geschaeftszeiten-Modell ist Backlog.
+5. **Benachrichtigungs-Mechanik** → **E-30**: In-App-Polling 60 s in Phase 1; SSE-Evaluation nach Lasttest in M3.

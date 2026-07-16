@@ -206,10 +206,10 @@ Priorisierung nach MoSCoW: Muss (Phase 1 zwingend), Soll (Phase 1 geplant, verha
 | NFR-04 | Verfügbarkeit | 99,5 % Verfügbarkeit pro Monat für die Kernanwendung (entspricht max. ca. 3,7 h Ausfall/Monat), geplante Wartungsfenster ausgenommen. | Uptime-Monitoring; Betriebskonzept in [11-deployment-und-betrieb.md](11-deployment-und-betrieb.md) |
 | NFR-05 | Sicherheit | OIDC/OAuth2 mit Keycloak, JWT-Validierung im Backend, TLS für alle Verbindungen, Least Privilege in der Datenbank (App-Rolle opencrm_app ohne BYPASSRLS, Migrationen über opencrm_migrator), OWASP-ASVS-orientierte Reviews, keine Secrets im Code. | Security-Review, Dependency-Scanning in CI |
 | NFR-06 | Mandantenisolation | Row-Level Security auf allen mandantenbezogenen Tabellen; automatisierte Isolationstests (Zugriffsversuche über Mandantengrenzen) sind Teil der CI und müssen fehlschlagen. | RLS-Testsuite; Konzept in [04-multi-tenancy.md](04-multi-tenancy.md) |
-| NFR-07 | DSGVO | Personenbezogene Daten nur mit dokumentierter Grundlage (gdpr_consent_at), Auskunfts- und Löschfähigkeit je betroffener Person, Audit-Log für Verarbeitungen, Datenhaltung in EU-Rechenzentren, AV-Verträge mit Mandanten. | Löschkonzept (offener Punkt 1), Verfahrensverzeichnis |
+| NFR-07 | DSGVO | Personenbezogene Daten nur mit dokumentierter Grundlage (gdpr_consent_at), Auskunfts- und Löschfähigkeit je betroffener Person, Audit-Log für Verarbeitungen, Datenhaltung in EU-Rechenzentren, AV-Verträge mit Mandanten. | Löschkonzept entschieden: Anonymisierung, E-02; Verfahrensverzeichnis |
 | NFR-08 | Datensicherung | Tägliche Backups plus kontinuierliche WAL-Archivierung; RPO ≤ 1 h, RTO ≤ 4 h; Restore wird regelmäßig geprobt. | Restore-Test-Protokolle |
 | NFR-09 | Browser-Support | Jeweils die zwei aktuellsten Versionen von Chrome, Firefox, Edge und Safari (Desktop); responsives Layout ab 1280 px optimiert, ab 768 px nutzbar. Kein Internet-Explorer-Support. | Cross-Browser-Tests in CI |
-| NFR-10 | Barrierefreiheit | WCAG 2.1 AA als Zielvorgabe: Tastaturbedienbarkeit, ausreichende Kontraste, ARIA-Labels, Fokusführung. In Phase 1 Ziel, kein Abnahmekriterium (offener Punkt 2). | Automatisierte a11y-Checks (axe) plus Stichproben-Audit |
+| NFR-10 | Barrierefreiheit | WCAG 2.1 AA als Zielvorgabe: Tastaturbedienbarkeit, ausreichende Kontraste, ARIA-Labels, Fokusführung. Pragmatische Umsetzung ab Phase 1, formales AA-Audit bei vertraglicher Anforderung (E-07). | Automatisierte a11y-Checks (axe) plus Stichproben-Audit |
 | NFR-11 | Beobachtbarkeit | Metriken (Micrometer/Prometheus, Grafana-Dashboards), strukturierte JSON-Logs mit tenant_id-Korrelation, verteiltes Tracing via OpenTelemetry. | Betriebs-Dashboards; Details in [11-deployment-und-betrieb.md](11-deployment-und-betrieb.md) |
 | NFR-12 | Technologie-Basis | Persistenz ausschließlich in PostgreSQL 16 (Auftraggeber-Anforderung A1); Phase 1 bewusst ohne Message-Broker und ohne Redis, asynchrone Verarbeitung über Spring Batch und Job-Tabellen. | Architektur-Review gegen [02-systemarchitektur.md](02-systemarchitektur.md) |
 | NFR-13 | Internationalisierung | UI zweisprachig (de/en, react-i18next); Persistenz durchgängig UTC (timestamptz), Anzeige in der Zeitzone des Nutzers; Beträge in ISO-4217-Währungen mit Default-Währung je Mandant. | UI-Review, Datenmodell-Review |
@@ -230,7 +230,7 @@ Folgende Themen sind bewusst nicht Teil der Phase 1. Aufnahmekandidaten für sp�
 | Automatisches Lead-Scoring (ML-basiert) | leads.score ist vorhanden (FR-25), wird aber manuell oder per Import gepflegt. |
 | Message-Broker, Redis, Event-Streaming | Bewusste Architekturentscheidung für Phase 1; asynchrone Verarbeitung über Spring Batch und PostgreSQL-Job-Tabellen. |
 | Native Mobile-Apps / Offline-Betrieb | Die responsive SPA deckt den Bedarf der Phase 1 ab. |
-| Self-Service-Registrierung neuer Mandanten | Onboarding erfolgt in Phase 1 durch den platform-admin (offener Punkt 5). |
+| Self-Service-Registrierung neuer Mandanten | Onboarding erfolgt in Phase 1 durch den platform-admin (E-54). |
 
 ## 7. Glossar
 
@@ -250,8 +250,10 @@ Folgende Themen sind bewusst nicht Teil der Phase 1. Aufnahmekandidaten für sp�
 
 ## 8. Offene Punkte
 
-1. DSGVO-Löschkonzept: Entscheidung zwischen Anonymisierung und physischer Löschung nach Frist je Entitätstyp (insbesondere Leads/Kontakte und deren Spuren in audit_log und lead_assignments) steht aus; Abstimmung mit Datenschutzbeauftragtem erforderlich.
-2. Barrierefreiheit: Ob WCAG 2.1 AA ab Phase 2 verbindliches Abnahmekriterium wird (inklusive externem Audit), ist mit dem Auftraggeber zu klären (NFR-10).
-3. SLA-Details: Wartungsfenster, Supportzeiten und Eskalationswege zur Verfügbarkeitszusage von 99,5 % (NFR-04) sind vertraglich noch nicht fixiert.
-4. Duplikatabgleich beim Import: Die verbindlichen Matching-Schlüssel je Entitätstyp (z. B. email für Kontakte, sku für Produkte) müssen in [08-import-export.md](08-import-export.md) festgelegt werden (FR-34).
-5. Mandanten-Onboarding: Ob ein teilautomatisierter Onboarding-Ablauf (Keycloak Organization plus Tenant-Anlage in einem Schritt) bereits in Phase 1 umgesetzt wird oder der platform-admin manuell provisioniert, ist offen.
+Alle offenen Punkte dieses Kapitels sind entschieden oder terminiert (Stand 2026-07-16) — Details im [Entscheidungsprotokoll](13-entscheidungen.md).
+
+1. DSGVO-Löschkonzept → **E-02**: Anonymisierung statt physischer Löschung mit Standardfristen (je Tenant konfigurierbar); die juristische Bestätigung läuft parallel und blockiert die Entwicklung nicht.
+2. Barrierefreiheit (WCAG 2.1 AA, NFR-10) → **E-07**: pragmatische Umsetzung ab Start; formales AA-Audit erst bei vertraglicher Anforderung.
+3. SLA-Details (NFR-04) → **E-53** (terminiert): Wartungsfenster, Supportzeiten und Eskalationswege legen Product Owner/Vertrieb vor dem ersten zahlenden Mandanten fest.
+4. Duplikatabgleich beim Import (FR-34) → Matching-Schlüssel je Entitätstyp sind in [08-import-export.md](08-import-export.md) festgelegt; zusätzlich **E-11**: `external_id` als bevorzugter Match-Schlüssel.
+5. Mandanten-Onboarding → **E-54**: Provisionierung über einen Admin-API-Aufruf, der Keycloak-Organization, Tenant und Seeds in einem Schritt anlegt; Auslösung manuell durch den platform-admin.

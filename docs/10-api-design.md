@@ -59,7 +59,7 @@ sequenceDiagram
 | Betraege | Dezimalwerte als JSON-Number mit fixer Skala (z. B. `1250.00`), Waehrung als ISO-4217-Code (`"currency": "EUR"`) |
 | Enums | GROSSBUCHSTABEN wie im Datenmodell: `"status": "ASSIGNED"` ([03-datenmodell.md](03-datenmodell.md)) |
 | Loeschen | `DELETE` fuehrt Soft Delete aus (`deleted_at`); geloeschte Datensaetze erscheinen nicht mehr in Listen/Gets |
-| PATCH-Semantik | JSON Merge Patch (RFC 7386): nur mitgesendete Felder werden geaendert, `null` loescht ein Feld |
+| PATCH-Semantik | JSON Merge Patch (RFC 7386): nur mitgesendete Felder werden geaendert, `null` loescht ein Feld; kein JSON Patch (RFC 6902) — Listen-Umsortierung laeuft ueber dedizierte Endpunkte (E-38, siehe [13-entscheidungen.md](13-entscheidungen.md)) |
 
 Erfolgs-Statuscodes: `200` (GET/PATCH/Aktion mit Response-Body), `201` mit `Location`-Header (POST Create), `202` (asynchron angenommener Job), `204` (DELETE).
 
@@ -69,7 +69,7 @@ Alle Listen-Endpunkte sind Cursor-basiert paginiert.
 
 - Parameter: `cursor` (opak, Base64-kodiert; leer fuer erste Seite) und `limit` (Default **50**, Maximum **200**; groessere Werte werden mit `validation_failed` abgelehnt).
 - Der Cursor kodiert Sortierschluessel + `id` als Tiebreaker und ist nur fuer dieselbe Kombination aus Filter und Sortierung gueltig; ein unpassender Cursor liefert `validation_failed`.
-- `totalCount` ist optional und wird nur berechnet, wenn der Client `includeTotal=true` sendet (Kostenkontrolle bei grossen Tabellen).
+- `totalCount` ist optional (E-37): Nur wenn der Client den optionalen Query-Parameter `includeTotal=true` sendet, berechnet der Server einen exakten `COUNT(*)` unter identischem Filter und liefert ihn als `totalCount` im Envelope. Ohne den Parameter wird `totalCount` weggelassen (Default, Kostenkontrolle bei grossen Tabellen); Re-Evaluation nach den ersten Lasttests.
 
 Response-Envelope (einheitlich fuer alle Listen):
 
@@ -92,6 +92,7 @@ Filter sind Query-Parameter; mehrere Filter werden UND-verknuepft. Typische Para
 | `status` | Enum, mehrfach als CSV | `status=NEW,ASSIGNED` | Statusfilter (ODER innerhalb des Parameters) |
 | `ownerId` | UUID | `ownerId=6f1b…` | Zugewiesener Verkaeufer |
 | `q` | String | `q=acme` | Volltext ueber definierte Textfelder der Ressource |
+| `externalId` | String | `externalId=ERP-4711` | Exakter Match auf `external_id` bei leads, accounts, contacts, products (E-11) |
 | `createdFrom` / `createdTo` | ISO 8601 | `createdFrom=2026-07-01T00:00:00Z` | Zeitraum auf `createdAt` (inklusiv / exklusiv) |
 | `source`, `pipelineId`, `stageId`, `accountId`, `productId`, `teamId` | Enum/UUID | — | ressourcenspezifische Filter |
 
@@ -134,7 +135,7 @@ Beispiel (Validierungsfehler):
 | `version_conflict` | 412 | `If-Match`-Version stimmt nicht mit aktuellem Stand ueberein (Optimistic Locking) | nach Reload |
 | `precondition_required` | 428 | `If-Match` fehlt bei PATCH auf versionierter Ressource | nein |
 | `idempotency_key_conflict` | 409 | `Idempotency-Key` wurde mit anderem Request-Body wiederverwendet | nein |
-| `quota_exceeded` | 403 | Plan-Limit des Mandanten erreicht (z. B. max. Zeilen je Import, max. parallele Jobs) | nein |
+| `quota_exceeded` | 403 / 429 | Limit des Mandanten erreicht: statische Plan-Quotas (z. B. max. Nutzer, max. Zeilen je Import) liefern 403; zeitliche Limits (z. B. max. Export-Jobs pro Stunde, parallele Jobs, E-35) liefern 429 mit `Retry-After`-Header | nein |
 | `rate_limit_exceeded` | 429 | Zu viele Requests; `Retry-After`-Header beachten | ja, nach Wartezeit |
 | `payload_too_large` | 413 | Upload ueberschreitet das Groessenlimit ([08-import-export.md](08-import-export.md)) | nein |
 | `unsupported_media_type` | 415 | Falscher Content-Type (z. B. XML) | nein |
@@ -168,10 +169,10 @@ Limits werden je Principal durchgesetzt: fuer `opencrm-web` je User (`sub`-Claim
 |---|---|
 | `opencrm-web`, Lese-Endpunkte | 600 Requests/min je User |
 | `opencrm-web`, Schreib-Endpunkte | 120 Requests/min je User |
-| `opencrm-api` (client_credentials) | 300 Requests/min je Client |
+| `opencrm-api` (client_credentials) | 600 Requests/min je Client (E-39) |
 | Job-Erzeugung (`POST /import-jobs`, `/export-jobs`) | 10 Requests/min je User |
 
-Jede Response traegt die Header `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset` (Unix-Epoch-Sekunden). Bei Ueberschreitung: `429 rate_limit_exceeded` mit `Retry-After`. Umsetzung Phase 1 in-memory je Backend-Instanz (Bucket4j), da bewusst kein Redis eingesetzt wird; das effektive Limit skaliert damit mit der Replikazahl (dokumentierte Einschraenkung, siehe [11-deployment-und-betrieb.md](11-deployment-und-betrieb.md)).
+Jede Response traegt die Header `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset` (Unix-Epoch-Sekunden). Bei Ueberschreitung: `429 rate_limit_exceeded` mit `Retry-After`. Umsetzung Phase 1 (E-39, siehe [13-entscheidungen.md](13-entscheidungen.md)): in-memory je Backend-Instanz (Bucket4j), da bewusst kein Redis eingesetzt wird; die Limits sind konservativ gewaehlt (Replikazahl eingerechnet), und die Durchsetzung erfolgt im Backend, nicht am Ingress. Das effektive Limit skaliert damit mit der Replikazahl (dokumentierte Einschraenkung, siehe [11-deployment-und-betrieb.md](11-deployment-und-betrieb.md)); ein DB-gestuetzter Zaehler kommt erst bei nachgewiesenem Bedarf.
 
 ## 9. Endpunkt-Katalog
 
@@ -181,7 +182,7 @@ Rollen-Legende: **TA** = tenant-admin, **SM** = sales-manager, **SR** = sales-re
 
 | Methode | Pfad | Zweck | Rollen |
 |---|---|---|---|
-| GET | `/leads` | Liste mit Filtern (`status`, `ownerId`, `source`, `q`, `createdFrom/To`) | alle — Scope: SR eigene plus nicht zugewiesene (falls Claim aktiviert), SM eigenes Team plus nicht zugewiesene (siehe [06, Abschnitt 10](06-lead-management.md)) |
+| GET | `/leads` | Liste mit Filtern (`status`, `ownerId`, `source`, `q`, `createdFrom/To`, `externalId`) | alle — Scope: SR eigene plus nicht zugewiesene (falls Claim aktiviert), SM eigenes Team plus nicht zugewiesene (siehe [06, Abschnitt 10](06-lead-management.md)) |
 | POST | `/leads` | Lead anlegen (`source=MANUAL` bzw. `API`) | TA, SM, SR |
 | GET | `/leads/{id}` | Einzelnen Lead lesen | alle — Scope wie `GET /leads` |
 | PATCH | `/leads/{id}` | Felder aendern (Merge Patch, `If-Match`) | TA, SM, SR (eigene) |
@@ -190,17 +191,19 @@ Rollen-Legende: **TA** = tenant-admin, **SM** = sales-manager, **SR** = sales-re
 | POST | `/leads/{id}/claim` | Selbstzuweisung („Claim") ohne Body; nur Status `NEW`, nur falls je Tenant aktiviert (`lead_claim_enabled`); `assignedBy` bleibt leer | TA, SM, SR |
 | POST | `/leads/{id}/convert` | Konvertierung zu Account/Contact/Opportunity; Status → `CONVERTED` | TA, SM, SR (eigene) |
 | POST | `/leads/bulk-assign` | Mehrere Leads zuweisen (direkt, per Regel oder Round-Robin auf Team); idempotenzfaehig | TA, SM |
+| POST | `/leads/{id}/reapply-rules` | Zuweisungsregeln fuer einen Lead manuell erneut anwenden (E-27; Regeln laufen automatisch nur bei Lead-Anlage) | TA, SM |
+| POST | `/leads/reapply-rules` | Bulk-Variante: Zuweisungsregeln erneut anwenden auf alle Leads im Status `NEW` (E-27) | TA, SM |
 
 ### Accounts und Contacts
 
 | Methode | Pfad | Zweck | Rollen |
 |---|---|---|---|
-| GET | `/accounts` | Liste (`ownerId`, `industry`, `q`) | alle |
+| GET | `/accounts` | Liste (`ownerId`, `industry`, `q`, `externalId`) | alle |
 | POST | `/accounts` | Account anlegen | TA, SM, SR |
 | GET | `/accounts/{id}` | Account lesen | alle |
 | PATCH | `/accounts/{id}` | Account aendern (`If-Match`) | TA, SM, SR (eigene) |
 | DELETE | `/accounts/{id}` | Soft Delete | TA, SM |
-| GET | `/contacts` | Liste (`accountId`, `q`) | alle |
+| GET | `/contacts` | Liste (`accountId`, `q`, `externalId`) | alle |
 | POST | `/contacts` | Contact anlegen (mit `accountId`) | TA, SM, SR |
 | GET | `/contacts/{id}` | Contact lesen | alle |
 | PATCH | `/contacts/{id}` | Contact aendern (inkl. `gdprConsentAt`) | TA, SM, SR |
@@ -210,7 +213,7 @@ Rollen-Legende: **TA** = tenant-admin, **SM** = sales-manager, **SR** = sales-re
 
 | Methode | Pfad | Zweck | Rollen |
 |---|---|---|---|
-| GET | `/products` | Liste (`category`, `active`, `q`) | alle |
+| GET | `/products` | Liste (`category`, `active`, `q`, `externalId`) | alle |
 | POST | `/products` | Produkt anlegen (`sku` eindeutig je Tenant, sonst `duplicate_found`) | TA, SM |
 | GET | `/products/{id}` | Produkt lesen | alle |
 | PATCH | `/products/{id}` | Produkt aendern / deaktivieren | TA, SM |
@@ -234,7 +237,8 @@ Rollen-Legende: **TA** = tenant-admin, **SM** = sales-manager, **SR** = sales-re
 | PATCH | `/pipelines/{id}` | Pipeline umbenennen, `isDefault` setzen | TA |
 | DELETE | `/pipelines/{id}` | Loeschen (nur ohne offene Opportunities, sonst `invalid_state_transition`) | TA |
 | POST | `/pipelines/{id}/stages` | Stage anlegen (`sortOrder`, `probability`, `isWon`, `isLost`) | TA |
-| PATCH | `/pipelines/{id}/stages/{stageId}` | Stage aendern / umsortieren | TA |
+| PATCH | `/pipelines/{id}/stages/{stageId}` | Stage aendern (Name, `probability`, `isWon`, `isLost`); Umsortierung ueber den dedizierten Order-Endpunkt | TA |
+| PUT | `/pipelines/{id}/stages/order` | Stages umsortieren: geordnete Liste aller Stage-IDs der Pipeline (dedizierter Endpunkt statt JSON Patch, E-38) | TA |
 | DELETE | `/pipelines/{id}/stages/{stageId}` | Stage loeschen (nur ohne zugeordnete Opportunities) | TA |
 
 ### Opportunities
@@ -362,6 +366,12 @@ paths:
             minimum: 1
             maximum: 200
             default: 50
+        - name: includeTotal
+          in: query
+          description: Liefert exakten totalCount im Envelope (E-37)
+          schema:
+            type: boolean
+            default: false
         - name: status
           in: query
           description: CSV mehrerer Statuswerte moeglich
@@ -374,6 +384,11 @@ paths:
             format: uuid
         - name: q
           in: query
+          schema:
+            type: string
+        - name: externalId
+          in: query
+          description: Exakter Match auf external_id (E-11)
           schema:
             type: string
         - name: createdFrom
@@ -634,8 +649,10 @@ Nicht Teil von Phase 1 (bewusst: kein Message-Broker). Vorgesehene Eckpunkte fue
 
 ## Offene Punkte
 
-1. `totalCount`-Berechnung: exakter `COUNT(*)` versus Schaetzung ueber `pg_class.reltuples` fuer sehr grosse Tabellen — Entscheidung nach ersten Lasttests.
-2. PATCH-Semantik ist als JSON Merge Patch (RFC 7386) festgelegt; ob zusaetzlich JSON Patch (RFC 6902) fuer partielle Listen-Operationen (z. B. Umsortieren von Stages) angeboten wird, ist offen.
-3. Rate Limiting ist in Phase 1 nur je Backend-Instanz durchsetzbar (kein Redis); ob das fuer die Produktions-Replikazahl akzeptabel ist oder ein DB-gestuetzter Zaehler noetig wird, ist zu klaeren.
-4. Umfang der Volltextsuche (`q`): einfache `ILIKE`-Suche je Ressource versus zentraler Such-Endpunkt auf Basis von PostgreSQL Full Text Search — Festlegung gemeinsam mit dem Frontend-Team.
-5. Maschinenzugriff je Mandant: ob neben dem plattformweiten Service-Client `opencrm-api` mandantenspezifische API-Clients (eigene client_credentials je Tenant) angeboten werden, entscheidet sich mit den ersten Integrationsanforderungen.
+Alle offenen Punkte dieses Kapitels sind entschieden oder terminiert (Stand 2026-07-16) — Details im [Entscheidungsprotokoll](13-entscheidungen.md).
+
+1. `totalCount`-Berechnung -> **E-37**: nur auf Anfrage (`includeTotal=true`) als exakter `COUNT(*)`; Default ohne `totalCount` (Abschnitt 3).
+2. PATCH-Semantik -> **E-38**: nur JSON Merge Patch (RFC 7386); Listen-Umsortierung ueber dedizierte Endpunkte (z. B. `PUT /pipelines/{id}/stages/order`), kein JSON Patch (RFC 6902).
+3. Rate Limiting -> **E-39**: Phase 1 in-memory je Backend-Instanz (konservative Limits, Replikazahl eingerechnet); Service-Client `opencrm-api` 600 Requests/min je Client; DB-gestuetzter Zaehler erst bei nachgewiesenem Bedarf (Abschnitt 8).
+4. Volltextsuche -> **E-40**: `q` je Ressource mit `ILIKE` + `pg_trgm` in Phase 1; zentraler Such-Endpunkt (PostgreSQL FTS) Phase 2.
+5. Tenant-API-Clients -> **E-41**: mandantenspezifische `client_credentials`-Clients sind Phase 2; Phase 1 nutzt nur den plattformweiten Client `opencrm-api`.

@@ -53,7 +53,7 @@ Import und Export unterstuetzen in Phase 1 die Entitaetstypen gemaess `import_jo
 | `CONTACT` | `contacts` | ja | ja | `account_id` per Account-Name-Referenz aufloesbar; `gdpr_consent_at` importierbar |
 | `PRODUCT` | `products` | ja | ja | `sku` eindeutig je Tenant; Preise mit `currency` (ISO 4217) |
 
-Opportunities, Activities und Pipelines sind in Phase 1 nicht Teil des Datei-Imports (siehe Offene Punkte).
+Opportunities, Activities und Pipelines sind in Phase 1 nicht Teil des Datei-Imports; der Opportunity-Import bleibt eine spaetere Ausbaustufe nach M3 (E-08, siehe [13-entscheidungen.md](13-entscheidungen.md)). Alle vier importierbaren Entitaetstypen tragen `external_id` (E-11) als optional importierbaren, bevorzugten Match-Schluessel (Abschnitt 6) — dieses Fundament fuer den spaeteren Opportunity-Import wird bereits in Phase 1 gelegt.
 
 ## 3. Import-Ablauf
 
@@ -122,7 +122,8 @@ Regeln:
 - `DRY_RUN` schreibt ausschliesslich in `import_jobs` und `import_job_errors`, niemals in die Zieltabellen. Die Vorschau zeigt: Gesamtzeilen, Anzahl gueltig, Anzahl fehlerhaft sowie die ersten 20 Fehler mit Zeilennummer, Spalte und Meldung.
 - `EXECUTE` ist nur nach mindestens einem `DRY_RUN` mit identischem Mapping erlaubt (Backend erzwingt das; verhindert Import mit ungeprueftem Mapping).
 - Fehlerhafte Zeilen blockieren den Import nicht: gueltige Zeilen werden geschrieben, fehlerhafte landen in `import_job_errors` (Ergebnis `COMPLETED_WITH_ERRORS`).
-- Polling-Intervall der SPA: 2 Sekunden waehrend `VALIDATING`/`RUNNING`, mit TanStack Query `refetchInterval`. Kein WebSocket/SSE in Phase 1.
+- Polling-Intervall der SPA: 2 Sekunden waehrend `VALIDATING`/`RUNNING`, mit TanStack Query `refetchInterval`. Kein WebSocket/SSE in Phase 1. Ab M2 erzeugt der Job-Abschluss zusaetzlich eine In-App-Notification (E-34); Polling bleibt der Basis-Mechanismus.
+- Optional kann je Import-Job ein **Default-Owner** gesetzt werden (E-15): Er greift fuer Zeilen ohne gemappte bzw. aufloesbare Owner-Referenz; ohne Angabe bleibt `owner_id` leer (kein Zwang, `accounts.owner_id` ist nullable).
 
 ## 4. Spalten-Mapping
 
@@ -130,6 +131,7 @@ Das Mapping ordnet Quellspalten (CSV-Header bzw. erste XLSX-Zeile) den Zielfelde
 
 - **Auto-Vorschlag:** Das Backend normalisiert Header-Namen (Kleinschreibung, Umlaut-Transliteration, Sonderzeichen entfernen) und matcht gegen ein Synonym-Woerterbuch je Zielfeld (z. B. `email`, `e-mail`, `mail`, `e_mail_adresse` -> `email`). Treffergenauigkeit wird als `confidence` (0..1) mitgeliefert; die UI markiert Vorschlaege unter 0.8 zur manuellen Bestaetigung.
 - **Gespeicherte Vorlagen:** `import_mappings(id, tenant_id, entity_type, name, mapping)`. Beim Upload schlaegt das Backend Vorlagen desselben `entity_type` vor, deren Quellspalten die Datei-Header abdecken. Vorlagen sind tenant-weit sichtbar.
+- **Zeichenkodierung (E-33):** UTF-8 ist Default; eine UTF-8-BOM wird automatisch erkannt und beim Parsen uebersprungen. Der Mapping-Dialog bietet ab Phase 1 zusaetzlich Windows-1252/Latin-1 als explizite Auswahl an (`options.encoding`); eine darueber hinausgehende automatische Erkennung findet nicht statt. Die Option gilt fuer CSV — XLSX bringt die Kodierung formatbedingt mit.
 - **Custom Fields:** Zielfelder koennen `custom.<field_key>` sein — in Phase 1 ausschliesslich fuer `entity_type=LEAD`, da nur `leads` die Speicherspalte `custom` traegt (siehe [03-datenmodell.md](03-datenmodell.md), Abschnitt 7); zulaessige Keys stammen aus `custom_field_definitions` des Tenants, Typpruefung nach `field_type`. Fuer andere Entitaetstypen weist der `DRY_RUN` ein Mapping auf `custom.<field_key>` mit `CUSTOM_FIELD_UNKNOWN` ab.
 - **Mapping-Format** (`import_jobs.mapping`):
 
@@ -144,7 +146,8 @@ Das Mapping ordnet Quellspalten (CSV-Header bzw. erste XLSX-Zeile) den Zielfelde
     "date_format": "dd.MM.yyyy",
     "decimal_separator": ",",
     "default_country_code": "DE",
-    "skip_header_rows": 1
+    "skip_header_rows": 1,
+    "encoding": "UTF-8"
   }
 }
 ```
@@ -180,7 +183,9 @@ Jede Zeile wird vollstaendig geprueft; alle Fehler einer Zeile werden gesammelt 
 
 Die Strategie wird je Job in `import_jobs.duplicate_strategy` gewaehlt und wirkt auf Basis eines Match-Schluessels je Entitaet. Der Match beruecksichtigt nur Datensaetze des eigenen Tenants (RLS erzwingt das ohnehin) und ignoriert soft-geloeschte Datensaetze (`deleted_at IS NULL`).
 
-| entity_type | Match-Schluessel | Normalisierung fuer den Match |
+**Bevorzugter Match-Schluessel ist `external_id`** (E-11, siehe [13-entscheidungen.md](13-entscheidungen.md)): Alle importierbaren Entitaeten (`leads`, `accounts`, `contacts`, `products`) tragen `external_id` (text, NULL, partieller UNIQUE-Index je Tenant). Hat die Importdatei eine auf `external_id` gemappte Spalte und existiert im Tenant ein Datensatz mit gleicher `external_id`, greift die `duplicate_strategy` auf dieser Basis. Nur wenn kein `external_id`-Match moeglich ist (Spalte nicht gemappt, Zelle leer oder kein Treffer), gilt der Fallback auf die bisherigen Match-Schluessel. `external_id` wird getrimmt und case-sensitiv verglichen (technischer Schluessel, analog `sku`).
+
+| entity_type | Fallback-Match-Schluessel | Normalisierung fuer den Match |
 |---|---|---|
 | `LEAD` | `email` | Kleinschreibung, getrimmt; Zeilen ohne E-Mail gelten immer als neu |
 | `ACCOUNT` | `name` + `postal_code` | Name getrimmt, case-insensitiv; `postal_code` getrimmt |
@@ -256,6 +261,7 @@ Regeln:
 - **Spaltenauswahl:** `columns` ist eine geordnete Liste aus Standardfeldern und `custom.<field_key>` (Letzteres in Phase 1 nur fuer `LEAD`, siehe [03-datenmodell.md](03-datenmodell.md), Abschnitt 7); ohne Angabe wird ein dokumentierter Default-Spaltensatz je Entitaet exportiert. Custom Fields werden flach als eigene Spalten ausgegeben (CSV/XLSX) bzw. als `custom`-Objekt (JSON).
 - Formate: CSV mit UTF-8 (BOM fuer Excel-Kompatibilitaet), Trennzeichen `,`; XLSX mit einem Sheet je Export; JSON als Array von Objekten mit den kanonischen Feldnamen.
 - Zeitstempel werden in UTC (ISO 8601) exportiert; die Interpretation in Nutzer-Zeitzone ist Sache des Konsumenten.
+- **Tenant-Limits fuer Export-Jobs (E-35):** Maximal **2 parallel laufende Export-Jobs je Tenant** — weitere Jobs werden eingereiht — und maximal **10 Export-Jobs pro Stunde je Tenant**; Anfragen darueber hinaus lehnt die API mit `429 quota_exceeded` ab.
 - Limits: maximal 100 000 Zeilen je regulaerem Export-Job (analog Import); groessere Datenmengen sind ueber Filter zu segmentieren. **Ausnahme Offboarding-Vollexport:** Die beim Tenant-Offboarding je Entitaetstyp ausgeloesten `export_jobs`-Laeufe (siehe [04-multi-tenancy.md](04-multi-tenancy.md), Abschnitt 8.3) unterliegen keinem Zeilenlimit; der Batch-Job splittet die Ausgabe automatisch in Teildateien zu je 100 000 Zeilen (Key: `tenant_id/export/{job_id}/{file_name}.part-NNN`, eine signierte URL je Teildatei), damit auch enterprise-Mandanten (bis 1 000 000 Leads) vollstaendig exportiert werden koennen.
 - Statusmodell und Polling identisch zum Import (`export_jobs.status` nutzt dieselben Werte wie `import_jobs.status`).
 
@@ -279,8 +285,10 @@ Fuer Auskunftsersuchen nach Art. 15 DSGVO bietet OpenCRM einen personenbezogenen
 
 ## Offene Punkte
 
-1. Import von Opportunities inkl. `opportunity_items` (Positionsdaten mit Produktreferenz) — fachlich gewuenscht, aber wegen mehrstufiger Referenzaufloesung (Account, Pipeline, Stage, Produkt) auf Phase 2 verschoben; Entscheidung bis Roadmap-Review.
-2. Match-Schluessel fuer Accounts (`name` + `postal_code`) ist bei Konzernen mit mehreren Standorten unter gleicher PLZ unscharf; zu klaeren, ob ein optionaler externer Schluessel (`external_id`) je Entitaet eingefuehrt wird.
-3. Zeichenkodierung beim CSV-Import: Phase 1 setzt UTF-8 voraus; offen ist, ob Latin-1/Windows-1252 automatisch erkannt oder als Option angeboten wird.
-4. Benachrichtigung bei Job-Abschluss (E-Mail oder In-App) statt reinem Polling — abhaengig von der Entscheidung zu einem Notification-Mechanismus in Phase 2.
-5. Ratenbegrenzung fuer Export-Jobs je Tenant (Schutz vor Storage- und DB-Last durch viele parallele Grossexporte); konkreter Grenzwert noch festzulegen.
+Alle offenen Punkte dieses Kapitels sind entschieden oder terminiert (Stand 2026-07-16) — Details im [Entscheidungsprotokoll](13-entscheidungen.md).
+
+1. Opportunity-Import -> **E-08**: bleibt spaetere Ausbaustufe (nach M3); das Fundament `external_id` wird in Phase 1 gelegt (Abschnitt 2).
+2. Unscharfer Account-Match -> **E-11**: `external_id` je importierbarer Entitaet als bevorzugter Match-Schluessel eingefuehrt (Abschnitt 6).
+3. CSV-Encoding -> **E-33**: UTF-8 Default mit BOM-Erkennung; Windows-1252/Latin-1 als explizite Auswahl im Mapping-Dialog (Abschnitt 4).
+4. Job-Benachrichtigung -> **E-34**: In-App-Notification ab M2, E-Mail-Benachrichtigung Phase 2; Polling bleibt Basis-Mechanismus (Abschnitt 3).
+5. Export-Rate-Limit -> **E-35**: max. 2 parallele Export-Jobs je Tenant plus max. 10 pro Stunde (`429 quota_exceeded`, Abschnitt 9).

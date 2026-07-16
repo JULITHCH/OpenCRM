@@ -36,7 +36,7 @@ Nicht-Ziele in Phase 1: frei konfigurierbare Reports (Report-Builder), Zielvorga
 
 ## 2. KPI-Katalog
 
-Alle KPIs beziehen sich auf einen Zeitraum `[from, to)` (halb-offenes Intervall, UTC-Tage) und unterstuetzen die Dimensionen **Zeitraum, Team, Verkaeufer, Produktkategorie, Pipeline** — sofern die Dimension fuer die KPI fachlich sinnvoll ist (unten je KPI vermerkt). Betraege werden in der Default-Waehrung des Tenants ausgewiesen (siehe Offener Punkt 3). Die Beispiel-SQLs zeigen die Backend-Queries; `:tenant_id` stammt immer aus dem JWT-Claim `tenant_id`, nie aus Client-Parametern (siehe [04-multi-tenancy.md](04-multi-tenancy.md)).
+Alle KPIs beziehen sich auf einen Zeitraum `[from, to)` (halb-offenes Intervall, UTC-Tage) und unterstuetzen die Dimensionen **Zeitraum, Team, Verkaeufer, Produktkategorie, Pipeline** — sofern die Dimension fuer die KPI fachlich sinnvoll ist (unten je KPI vermerkt). Betraege werden in der Default-Waehrung des Tenants ausgewiesen; in Phase 1 gilt eine Waehrung je Mandant — alle Opportunities laufen in der Tenant-Waehrung, eine Umrechnung ist nicht noetig (Multi-Currency ist eine spaetere Ausbaustufe, siehe E-01 im [Entscheidungsprotokoll](13-entscheidungen.md)). Die Beispiel-SQLs zeigen die Backend-Queries; `:tenant_id` stammt immer aus dem JWT-Claim `tenant_id`, nie aus Client-Parametern (siehe [04-multi-tenancy.md](04-multi-tenancy.md)).
 
 **Abfrageregel fuer `mv_sales_kpis_daily`:** Die Sicht enthaelt zwei Granularitaeten. Zeilen mit `product_category IS NULL` tragen die Gesamtwerte je Tag/Owner/Pipeline; Zeilen mit gesetzter `product_category` tragen ausschliesslich die nach Kategorie aufgeteilten Betragskennzahlen (`won_amount`, `open_amount`, `weighted_amount`). Queries ohne Kategorie-Filter muessen `product_category IS NULL` setzen, sonst werden Betraege doppelt gezaehlt.
 
@@ -99,17 +99,20 @@ SELECT SUM(won_count)::numeric
 ### 2.4 Lead-Conversion
 
 - **Definition:** Anteil konvertierter an abgeschlossenen Leads im Zeitraum.
-- **Formel:** `CONVERTED / (CONVERTED + DISQUALIFIED)`.
+- **Formel:** `CONVERTED / (CONVERTED + DISQUALIFIED)`; CONVERTED nach `converted_at`, DISQUALIFIED nach `disqualified_at` im Zeitraum.
 - **Dimensionen:** Zeitraum, Team, Verkaeufer (Pipeline/Produktkategorie nicht anwendbar).
-- **Hinweis:** `leads` besitzt keinen dedizierten Abschluss-Zeitstempel; als Naeherung dient `updated_at` (Offener Punkt 1). Da `DISQUALIFIED` nicht in der MV liegt, laeuft diese KPI auf der Basistabelle.
+- **Hinweis:** Da `DISQUALIFIED` nicht in der MV liegt, laeuft diese KPI auf der Basistabelle.
 
 ```sql
-SELECT COUNT(*) FILTER (WHERE status = 'CONVERTED')::numeric
-       / NULLIF(COUNT(*) FILTER (WHERE status IN ('CONVERTED', 'DISQUALIFIED')), 0)
+SELECT COUNT(*) FILTER (WHERE status = 'CONVERTED'
+                          AND converted_at >= :from AND converted_at < :to)::numeric
+       / NULLIF(COUNT(*) FILTER (WHERE (status = 'CONVERTED'
+                                        AND converted_at >= :from AND converted_at < :to)
+                                    OR (status = 'DISQUALIFIED'
+                                        AND disqualified_at >= :from AND disqualified_at < :to)), 0)
        AS lead_conversion
   FROM leads
  WHERE tenant_id = :tenant_id
-   AND updated_at >= :from AND updated_at < :to   -- Naeherung, siehe Offene Punkte
    AND deleted_at IS NULL
    AND (:owner_id::uuid IS NULL OR owner_id = :owner_id);
 ```
@@ -254,7 +257,7 @@ Verbindliche Regeln laut Baseline:
 1. Rollen und `tenant_id` kommen aus dem validierten JWT (siehe [05-authentifizierung-keycloak.md](05-authentifizierung-keycloak.md)); die Team-Zugehoerigkeit aus `team_members` der App-DB. Fuer sales-manager gilt: sichtbar sind die Teams, in denen der Nutzer Mitglied mit `is_lead = true` ist.
 2. Der Scope wird als Pflicht-Praedikat in jede Repository-Query eingesetzt: sales-rep -> `owner_id = :self`; sales-manager -> `team_id IN (:led_teams)` bzw. `owner_id IN (SELECT user_id FROM team_members WHERE team_id IN (:led_teams))`; tenant-admin/read-only -> nur `tenant_id`-Filter.
 3. Client-Filter (`ownerId`, `teamId`) werden gegen den Scope validiert. Ein Filter ausserhalb des Scopes fuehrt zu `403` mit `application/problem+json` (RFC 9457, siehe [10-api-design.md](10-api-design.md)) — er wird nicht stillschweigend eingeengt, damit Fehlbedienung sichtbar ist.
-4. Der anonymisierte Team-Durchschnitt fuer sales-rep wird serverseitig als Aggregat ueber das Team berechnet und ohne Personenaufloesung ausgeliefert (nur `team_avg`-Werte, keine Einzelwerte anderer Nutzer). Mindestteamgroesse siehe Offener Punkt 4.
+4. Der anonymisierte Team-Durchschnitt fuer sales-rep wird serverseitig als Aggregat ueber das Team berechnet und ohne Personenaufloesung ausgeliefert (nur `team_avg`-Werte, keine Einzelwerte anderer Nutzer). Er wird nur ab einer Teamgroesse von mindestens 3 Mitgliedern ausgeliefert; bei kleineren Teams wird `teamAvg` ausgeblendet, damit keine Rueckschluesse auf Einzelpersonen moeglich sind (E-75).
 5. Fuer Echtzeit-Queries auf Basistabellen wirkt zusaetzlich RLS ueber `app.current_tenant` als zweite Verteidigungslinie; fuer die MV ersetzt der explizite `tenant_id`-Filter die RLS (siehe 5.4).
 
 ## 5. Architektur der Aggregation
@@ -270,7 +273,7 @@ flowchart LR
     end
     API -->|"laufender Tag: Echtzeit-Query, SET LOCAL app.current_tenant"| BT
     API -->|"historische Tage: expliziter tenant_id-Filter"| MV
-    SCHED["Spring Scheduler (alle 15 Min)"] -->|"pg_try_advisory_lock + REFRESH CONCURRENTLY"| MV
+    SCHED["Spring Scheduler (alle 15 Min)"] -->|"ShedLock + REFRESH CONCURRENTLY"| MV
     BT -.->|"REFRESH liest Basistabellen"| MV
 ```
 
@@ -278,20 +281,17 @@ Grundprinzip: Historische Tage (`day < CURRENT_DATE`) kommen aus der vorberechne
 
 ### 5.2 Definition der materialisierten Sicht
 
-Dimensionen: `day, tenant_id, owner_id, team_id, pipeline_id, product_category`. Kennzahlen: `won_amount, won_count, lost_count, open_amount, weighted_amount, new_leads, converted_leads, activities_count`. Tageszuordnung: WON nach `won_at`, LOST nach `lost_at`, offene Opportunities und Leads nach `created_at` (die Summe der `open_amount` ueber alle Tage ergibt damit den aktuellen Gesamtbestand der offenen Pipeline). Alle Tagesgrenzen in UTC.
+Dimensionen: `day, tenant_id, owner_id, team_id, pipeline_id, product_category`. Kennzahlen: `won_amount, won_count, lost_count, open_amount, weighted_amount, new_leads, converted_leads, activities_count`. Tageszuordnung: WON nach `won_at`, LOST nach `lost_at`, offene Opportunities und neue Leads nach `created_at` (die Summe der `open_amount` ueber alle Tage ergibt damit den aktuellen Gesamtbestand der offenen Pipeline), konvertierte Leads nach `converted_at`. Alle Tagesgrenzen in UTC.
 
 ```sql
 CREATE MATERIALIZED VIEW mv_sales_kpis_daily AS
 WITH user_team AS (
-    -- Primaerteam je Nutzer; bei Mehrfachmitgliedschaft deterministisch
-    -- das kleinste team_id (siehe Offene Punkte)
-    SELECT u.id AS user_id,
-           (SELECT tm.team_id
-              FROM team_members tm
-             WHERE tm.user_id = u.id
-             ORDER BY tm.team_id
-             LIMIT 1) AS team_id
+    -- Primaerteam je Nutzer (team_members.is_primary,
+    -- genau ein Primaerteam je Nutzer)
+    SELECT u.id AS user_id, tm.team_id
       FROM users u
+      LEFT JOIN team_members tm
+        ON tm.user_id = u.id AND tm.is_primary
 ),
 item_lines AS (
     SELECT oi.tenant_id,
@@ -351,8 +351,8 @@ facts AS (
       FROM leads l
      WHERE l.deleted_at IS NULL
     UNION ALL
-    -- 7) Konvertierte Leads (Naeherung ueber updated_at, siehe Offene Punkte)
-    SELECT l.tenant_id, (l.updated_at AT TIME ZONE 'UTC')::date,
+    -- 7) Konvertierte Leads (Tag = Konversionstag, converted_at)
+    SELECT l.tenant_id, (l.converted_at AT TIME ZONE 'UTC')::date,
            l.owner_id, NULL::uuid, NULL,
            0, 0, 0, 0, 0, 0, 1, 0
       FROM leads l
@@ -400,25 +400,17 @@ CREATE INDEX ix_mv_sales_kpis_daily_tenant_day
 Refresh-Ablauf (Spring Scheduler im Modul `reporting`, alle 15 Minuten):
 
 1. Der Scheduler holt eine Connection aus einem **dedizierten Reporting-Pool** (Groesse 1) mit der DB-Rolle `opencrm_reporting`. Hintergrund: Der Refresh fuehrt die MV-Query mit den Rechten des MV-Owners aus; liefe er als `opencrm_app`, wuerde RLS greifen und die MV bliebe leer. `opencrm_reporting` ist Owner der MV, hat `BYPASSRLS` und ausschliesslich SELECT auf die benoetigten Basistabellen; die Rolle wird nur fuer den Refresh verwendet, nie fuer Request-Verarbeitung.
-2. `SELECT pg_try_advisory_lock(hashtext('mv_sales_kpis_daily'))` — Session-Level Advisory Lock. Gibt er `false` zurueck, refresht bereits eine andere Backend-Instanz; der Lauf endet sofort (kein Warten, kein Doppel-Refresh bei mehreren Pods).
+2. Die Koordination bei mehreren Backend-Instanzen uebernimmt **ShedLock** (JDBC-Provider, PostgreSQL-Locktabelle) — wie bei allen wiederkehrenden Jobs (siehe E-43 im [Entscheidungsprotokoll](13-entscheidungen.md)). Haelt bereits eine andere Instanz den Lock, wird der Lauf uebersprungen (kein Warten, kein Doppel-Refresh bei mehreren Pods); genau eine Instanz fuehrt den Refresh aus.
 3. `REFRESH MATERIALIZED VIEW CONCURRENTLY mv_sales_kpis_daily` als eigenes Autocommit-Statement — `CONCURRENTLY` ist in Transaktionsbloecken (und damit in plpgsql-Funktionen) nicht erlaubt. Lesezugriffe bleiben waehrend des Refresh moeglich.
-4. `SELECT pg_advisory_unlock(hashtext('mv_sales_kpis_daily'))` im `finally`-Block derselben Connection.
-5. Erststart: Die MV wird per Flyway `WITH NO DATA` angelegt; solange `pg_matviews.ispopulated = false` ist, fuehrt der Scheduler einmalig ein nicht-konkurrentes `REFRESH` aus.
+4. Erststart: Die MV wird per Flyway `WITH NO DATA` angelegt; solange `pg_matviews.ispopulated = false` ist, fuehrt der Scheduler einmalig ein nicht-konkurrentes `REFRESH` aus.
 
 ```java
 @Scheduled(cron = "0 */15 * * * *")
-void refreshSalesKpis() {
+@SchedulerLock(name = "mv_sales_kpis_daily_refresh", lockAtMostFor = "14m")
+void refreshSalesKpis() throws SQLException {
     try (var con = reportingDataSource.getConnection();
          var st = con.createStatement()) {
-        var rs = st.executeQuery(
-            "SELECT pg_try_advisory_lock(hashtext('mv_sales_kpis_daily'))");
-        rs.next();
-        if (!rs.getBoolean(1)) return; // andere Instanz refresht bereits
-        try {
-            st.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY mv_sales_kpis_daily");
-        } finally {
-            st.execute("SELECT pg_advisory_unlock(hashtext('mv_sales_kpis_daily'))");
-        }
+        st.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY mv_sales_kpis_daily");
     }
 }
 ```
@@ -495,7 +487,9 @@ Nicht Teil von Phase 1, aber im Design beruecksichtigt (Einordnung siehe [12-roa
 
 ## 9. Offene Punkte
 
-1. `leads` hat keine Spalten `converted_at`/`disqualified_at`; Lead-Conversion und `converted_leads` naehern den Zeitpunkt ueber `updated_at` an. Entscheidung noetig (mit [03-datenmodell.md](03-datenmodell.md)): Spalten ergaenzen oder Zeitpunkt aus `audit_log` ableiten.
-2. Nutzer in mehreren Teams: Die MV waehlt deterministisch das kleinste `team_id` als Primaerteam. Zu klaeren, ob `team_members` ein `is_primary`-Flag erhaelt oder Kennzahlen je Mitgliedschaft dupliziert werden sollen.
-3. Multi-Currency: Phase 1 summiert Betraege ohne Umrechnung und unterstellt die Default-Waehrung des Tenants. Umgang mit abweichenden `opportunities.currency` (Ausschluss, Warnung oder Kursumrechnung mit Kurstabelle) ist offen.
-4. Anonymisierter Team-Durchschnitt bei kleinen Teams: Ab welcher Mindestgroesse (Vorschlag: >= 3 Mitglieder) wird `teamAvg` ausgeliefert, damit keine Rueckschluesse auf Einzelpersonen moeglich sind?
+Alle offenen Punkte dieses Kapitels sind entschieden (Stand 2026-07-16) — Details im [Entscheidungsprotokoll](13-entscheidungen.md).
+
+- Punkt 1 (`converted_at`/`disqualified_at`) → **E-09**: Spalten ergaenzt.
+- Punkt 2 (Primaerteam) → **E-19**: `is_primary`-Flag.
+- Punkt 3 (Multi-Currency) → **E-01**: eine Waehrung je Mandant (Phase 1).
+- Punkt 4 (Mindestteamgroesse) → **E-75**: mindestens 3.
