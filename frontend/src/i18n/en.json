@@ -1,0 +1,377 @@
+{
+  "app": {
+    "title": "OpenCRM",
+    "authLoading": "Checking sign-in …",
+    "authError": "Sign-in failed. Is Keycloak running (infra/docker-compose.yml)?",
+    "logout": "Sign out"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "leads": "Leads",
+    "accounts": "Accounts",
+    "contacts": "Contacts",
+    "opportunities": "Opportunities",
+    "products": "Products",
+    "import": "Import",
+    "settings": "Settings"
+  },
+  "common": {
+    "cancel": "Cancel",
+    "save": "Save",
+    "create": "Create",
+    "delete": "Delete",
+    "actions": "Actions",
+    "search": "Search",
+    "loadMore": "Load more",
+    "forbidden": "You are not allowed to perform this action."
+  },
+  "placeholder": {
+    "body": "This page will follow in a later increment."
+  },
+  "dashboard": {
+    "heading": "Dashboard",
+    "range": {
+      "label": "Time range",
+      "last7": "Last 7 days",
+      "last30": "Last 30 days",
+      "last90": "Last 90 days"
+    },
+    "kpisLoadError": "Failed to load KPIs: {{message}}",
+    "kpi": {
+      "revenue": "Revenue",
+      "wonLost": "Won / Lost",
+      "winRate": "Win rate",
+      "avgSalesCycle": "Avg. sales cycle",
+      "daysValue": "{{value}} days",
+      "openPipeline": "Open pipeline",
+      "weightedPipeline": "Weighted pipeline",
+      "activities": "Activities"
+    },
+    "revenueChart": {
+      "title": "Revenue over time",
+      "revenue": "Revenue",
+      "loadError": "Failed to load revenue timeseries: {{message}}"
+    },
+    "funnelChart": {
+      "title": "Pipeline funnel",
+      "count": "Count",
+      "amount": "Amount",
+      "weighted": "Weighted",
+      "loadError": "Failed to load pipeline funnel: {{message}}"
+    },
+    "leaderboard": {
+      "title": "Leaderboard",
+      "user": "User",
+      "revenue": "Revenue",
+      "wonCount": "Won",
+      "empty": "No closed deals in this range.",
+      "loadError": "Failed to load leaderboard: {{message}}"
+    }
+  },
+  "notifications": {
+    "title": "Notifications",
+    "empty": "No unread notifications.",
+    "markAllRead": "Mark all as read",
+    "leadSlaBreach": "SLA breached: {{title}}",
+    "actionError": "Action failed: {{message}}"
+  },
+  "settings": {
+    "heading": "Settings",
+    "loading": "Loading settings …",
+    "adminOnly": "This page is only available to administrators.",
+    "loadError": "Failed to load settings: {{message}}",
+    "tenant": {
+      "title": "Tenant",
+      "name": "Name",
+      "plan": "Plan",
+      "currency": "Default currency"
+    },
+    "form": {
+      "title": "Policies",
+      "slaHours": "SLA (hours)",
+      "leadRetentionMonths": "Lead retention (months)",
+      "invalidNumber": "Please enter a valid number."
+    },
+    "saveSuccess": "Settings saved.",
+    "saveError": "Failed to save settings: {{message}}"
+  },
+  "products": {
+    "heading": "Products",
+    "create": "Create product",
+    "loading": "Loading products …",
+    "empty": "No products found.",
+    "loadError": "Failed to load products: {{message}}",
+    "columns": {
+      "sku": "SKU",
+      "name": "Name",
+      "category": "Category",
+      "listPrice": "List price",
+      "active": "Status"
+    },
+    "state": {
+      "active": "Active",
+      "inactive": "Inactive"
+    },
+    "rowActions": {
+      "edit": "Edit product"
+    },
+    "form": {
+      "createTitle": "Create product",
+      "editTitle": "Edit product",
+      "sku": "SKU",
+      "name": "Name",
+      "category": "Category",
+      "listPrice": "List price",
+      "active": "Active",
+      "skuRequired": "SKU is required.",
+      "nameRequired": "Name is required.",
+      "listPriceRequired": "Please enter a valid list price."
+    },
+    "createSuccess": "Product created.",
+    "createError": "Failed to create product: {{message}}",
+    "updateSuccess": "Product updated.",
+    "updateError": "Failed to update product: {{message}}"
+  },
+  "opportunities": {
+    "heading": "Opportunities",
+    "loading": "Loading opportunities …",
+    "empty": "No opportunities found.",
+    "loadError": "Failed to load opportunities: {{message}}",
+    "filter": {
+      "status": "Status",
+      "all": "All statuses"
+    },
+    "columns": {
+      "name": "Name",
+      "amount": "Amount",
+      "status": "Status",
+      "stage": "Stage",
+      "expectedCloseDate": "Expected close date"
+    },
+    "status": {
+      "OPEN": "Open",
+      "WON": "Won",
+      "LOST": "Lost"
+    }
+  },
+  "leads": {
+    "heading": "Leads",
+    "create": "Create lead",
+    "loading": "Loading leads …",
+    "empty": "No leads yet.",
+    "unassigned": "Unassigned",
+    "loadError": "Failed to load leads: {{message}}",
+    "filter": {
+      "status": "Status",
+      "all": "All statuses"
+    },
+    "columns": {
+      "title": "Title",
+      "company": "Company",
+      "lastName": "Last name",
+      "email": "Email",
+      "status": "Status",
+      "owner": "Owner"
+    },
+    "status": {
+      "NEW": "New",
+      "ASSIGNED": "Assigned",
+      "CONTACTED": "Contacted",
+      "QUALIFIED": "Qualified",
+      "DISQUALIFIED": "Disqualified",
+      "CONVERTED": "Converted"
+    },
+    "actions": {
+      "menu": "Actions",
+      "assign": "Assign",
+      "contacted": "Mark as contacted",
+      "qualify": "Qualify",
+      "disqualify": "Disqualify",
+      "contactedSuccess": "Lead marked as contacted.",
+      "qualifySuccess": "Lead qualified.",
+      "actionError": "Action failed: {{message}}"
+    },
+    "assign": {
+      "dialogTitle": "Assign lead “{{title}}”",
+      "user": "User",
+      "userRequired": "Please select a user.",
+      "usersLoadError": "Failed to load users: {{message}}",
+      "submit": "Assign",
+      "success": "Lead assigned.",
+      "error": "Failed to assign lead: {{message}}"
+    },
+    "disqualify": {
+      "dialogTitle": "Disqualify lead “{{title}}”",
+      "reason": "Reason",
+      "reasonRequired": "Reason is required.",
+      "submit": "Disqualify",
+      "success": "Lead disqualified.",
+      "error": "Failed to disqualify lead: {{message}}"
+    },
+    "form": {
+      "dialogTitle": "Create lead",
+      "title": "Title",
+      "company": "Company",
+      "lastName": "Last name",
+      "email": "Email",
+      "titleRequired": "Title is required.",
+      "companyOrLastNameRequired": "At least one of company or last name must be provided.",
+      "cancel": "Cancel",
+      "submit": "Create"
+    },
+    "createSuccess": "Lead created.",
+    "createError": "Failed to create lead: {{message}}"
+  },
+  "accounts": {
+    "heading": "Accounts",
+    "create": "Create account",
+    "loading": "Loading accounts …",
+    "empty": "No accounts found.",
+    "loadError": "Failed to load accounts: {{message}}",
+    "columns": {
+      "name": "Name",
+      "industry": "Industry",
+      "city": "City",
+      "country": "Country"
+    },
+    "rowActions": {
+      "edit": "Edit account",
+      "delete": "Delete account"
+    },
+    "form": {
+      "createTitle": "Create account",
+      "editTitle": "Edit account",
+      "name": "Name",
+      "industry": "Industry",
+      "website": "Website",
+      "street": "Street",
+      "postalCode": "Postal code",
+      "city": "City",
+      "country": "Country",
+      "nameRequired": "Name is required."
+    },
+    "createSuccess": "Account created.",
+    "createError": "Failed to create account: {{message}}",
+    "updateSuccess": "Account updated.",
+    "updateError": "Failed to update account: {{message}}",
+    "deleteTitle": "Delete account",
+    "deleteBody": "Do you really want to delete the account “{{name}}”?",
+    "deleteSuccess": "Account deleted.",
+    "deleteError": "Failed to delete account: {{message}}"
+  },
+  "contacts": {
+    "heading": "Contacts",
+    "create": "Create contact",
+    "loading": "Loading contacts …",
+    "empty": "No contacts found.",
+    "loadError": "Failed to load contacts: {{message}}",
+    "columns": {
+      "lastName": "Last name",
+      "firstName": "First name",
+      "email": "Email",
+      "phone": "Phone"
+    },
+    "rowActions": {
+      "edit": "Edit contact",
+      "delete": "Delete contact"
+    },
+    "form": {
+      "createTitle": "Create contact",
+      "editTitle": "Edit contact",
+      "lastName": "Last name",
+      "firstName": "First name",
+      "email": "Email",
+      "phone": "Phone",
+      "account": "Account",
+      "accountNoOptions": "No accounts found",
+      "accountLoading": "Loading accounts …",
+      "lastNameRequired": "Last name is required."
+    },
+    "createSuccess": "Contact created.",
+    "createError": "Failed to create contact: {{message}}",
+    "updateSuccess": "Contact updated.",
+    "updateError": "Failed to update contact: {{message}}",
+    "deleteTitle": "Delete contact",
+    "deleteBody": "Do you really want to delete the contact “{{name}}”?",
+    "deleteSuccess": "Contact deleted.",
+    "deleteError": "Failed to delete contact: {{message}}"
+  },
+  "import": {
+    "heading": "Lead import",
+    "back": "Back",
+    "next": "Next",
+    "steps": {
+      "file": "Choose file",
+      "mapping": "Mapping",
+      "dryRun": "Dry run",
+      "execute": "Import"
+    },
+    "file": {
+      "select": "Choose CSV file",
+      "hint": "Only CSV files with a header row are supported (max. 50 MB).",
+      "uploading": "Uploading file …",
+      "uploadError": "Upload failed: {{message}}",
+      "uploaded": "File “{{name}}” uploaded.",
+      "headers": "Detected columns"
+    },
+    "mapping": {
+      "csvColumn": "CSV column",
+      "targetField": "Target field",
+      "targetFieldFor": "Target field for column {{column}}",
+      "ignore": "Do not import",
+      "duplicateStrategy": "Duplicate strategy",
+      "strategies": {
+        "SKIP": "Skip",
+        "UPDATE": "Update",
+        "CREATE": "Create new"
+      },
+      "suggestionError": "Failed to load mapping suggestion: {{message}}",
+      "required": "Please map at least one column to a target field.",
+      "startDryRun": "Start dry run"
+    },
+    "fields": {
+      "title": "Title",
+      "companyName": "Company",
+      "firstName": "First name",
+      "lastName": "Last name",
+      "email": "Email",
+      "phone": "Phone",
+      "source": "Source",
+      "score": "Score",
+      "externalId": "External ID"
+    },
+    "run": {
+      "startError": "Failed to start the run: {{message}}",
+      "statusError": "Failed to load job status: {{message}}",
+      "progressWithTotal": "{{processed}} of {{total}} rows processed",
+      "progress": "{{processed}} rows processed",
+      "failed": "The run failed. Please check the mapping and the file.",
+      "totalRows": "Total rows",
+      "errorRows": "Rows with errors",
+      "skippedRows": "Skipped duplicates",
+      "errorsHeading": "Error details",
+      "errorsLoadError": "Failed to load error list: {{message}}",
+      "errorColumns": {
+        "row": "Row",
+        "column": "Column",
+        "code": "Code",
+        "message": "Message"
+      }
+    },
+    "dryRun": {
+      "running": "Dry run in progress …",
+      "done": "Dry run completed — no errors found.",
+      "doneWithErrors": "Dry run completed — errors were found. Rows with errors will be skipped during import.",
+      "startImport": "Start import"
+    },
+    "execute": {
+      "running": "Import in progress …",
+      "done": "Import completed.",
+      "doneWithErrors": "Import completed — rows with errors were skipped.",
+      "toLeads": "Go to leads"
+    }
+  },
+  "footer": {
+    "build": "Build {{sha}}"
+  }
+}

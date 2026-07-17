@@ -1,0 +1,377 @@
+{
+  "app": {
+    "title": "OpenCRM",
+    "authLoading": "Anmeldung wird geprüft …",
+    "authError": "Anmeldung fehlgeschlagen. Läuft Keycloak (infra/docker-compose.yml)?",
+    "logout": "Abmelden"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "leads": "Leads",
+    "accounts": "Accounts",
+    "contacts": "Kontakte",
+    "opportunities": "Opportunities",
+    "products": "Produkte",
+    "import": "Import",
+    "settings": "Einstellungen"
+  },
+  "common": {
+    "cancel": "Abbrechen",
+    "save": "Speichern",
+    "create": "Anlegen",
+    "delete": "Löschen",
+    "actions": "Aktionen",
+    "search": "Suche",
+    "loadMore": "Mehr laden",
+    "forbidden": "Keine Berechtigung für diese Aktion."
+  },
+  "placeholder": {
+    "body": "Diese Seite folgt in einem späteren Inkrement."
+  },
+  "dashboard": {
+    "heading": "Dashboard",
+    "range": {
+      "label": "Zeitraum",
+      "last7": "Letzte 7 Tage",
+      "last30": "Letzte 30 Tage",
+      "last90": "Letzte 90 Tage"
+    },
+    "kpisLoadError": "Kennzahlen konnten nicht geladen werden: {{message}}",
+    "kpi": {
+      "revenue": "Umsatz",
+      "wonLost": "Gewonnen / Verloren",
+      "winRate": "Win-Rate",
+      "avgSalesCycle": "Ø Sales-Cycle",
+      "daysValue": "{{value}} Tage",
+      "openPipeline": "Pipeline offen",
+      "weightedPipeline": "Pipeline gewichtet",
+      "activities": "Aktivitäten"
+    },
+    "revenueChart": {
+      "title": "Umsatzverlauf",
+      "revenue": "Umsatz",
+      "loadError": "Umsatz-Zeitreihe konnte nicht geladen werden: {{message}}"
+    },
+    "funnelChart": {
+      "title": "Pipeline-Funnel",
+      "count": "Anzahl",
+      "amount": "Betrag",
+      "weighted": "Gewichtet",
+      "loadError": "Pipeline-Funnel konnte nicht geladen werden: {{message}}"
+    },
+    "leaderboard": {
+      "title": "Leaderboard",
+      "user": "Nutzer",
+      "revenue": "Umsatz",
+      "wonCount": "Gewonnen",
+      "empty": "Keine Abschlüsse im Zeitraum.",
+      "loadError": "Leaderboard konnte nicht geladen werden: {{message}}"
+    }
+  },
+  "notifications": {
+    "title": "Benachrichtigungen",
+    "empty": "Keine ungelesenen Benachrichtigungen.",
+    "markAllRead": "Alle als gelesen markieren",
+    "leadSlaBreach": "SLA verletzt: {{title}}",
+    "actionError": "Aktion fehlgeschlagen: {{message}}"
+  },
+  "settings": {
+    "heading": "Einstellungen",
+    "loading": "Einstellungen werden geladen …",
+    "adminOnly": "Diese Seite ist nur für Administratoren verfügbar.",
+    "loadError": "Einstellungen konnten nicht geladen werden: {{message}}",
+    "tenant": {
+      "title": "Mandant",
+      "name": "Name",
+      "plan": "Plan",
+      "currency": "Standardwährung"
+    },
+    "form": {
+      "title": "Richtlinien",
+      "slaHours": "SLA (Stunden)",
+      "leadRetentionMonths": "Lead-Aufbewahrung (Monate)",
+      "invalidNumber": "Bitte eine gültige Zahl eingeben."
+    },
+    "saveSuccess": "Einstellungen wurden gespeichert.",
+    "saveError": "Einstellungen konnten nicht gespeichert werden: {{message}}"
+  },
+  "products": {
+    "heading": "Produkte",
+    "create": "Produkt anlegen",
+    "loading": "Produkte werden geladen …",
+    "empty": "Keine Produkte gefunden.",
+    "loadError": "Produkte konnten nicht geladen werden: {{message}}",
+    "columns": {
+      "sku": "SKU",
+      "name": "Name",
+      "category": "Kategorie",
+      "listPrice": "Listenpreis",
+      "active": "Status"
+    },
+    "state": {
+      "active": "Aktiv",
+      "inactive": "Inaktiv"
+    },
+    "rowActions": {
+      "edit": "Produkt bearbeiten"
+    },
+    "form": {
+      "createTitle": "Produkt anlegen",
+      "editTitle": "Produkt bearbeiten",
+      "sku": "SKU",
+      "name": "Name",
+      "category": "Kategorie",
+      "listPrice": "Listenpreis",
+      "active": "Aktiv",
+      "skuRequired": "SKU ist ein Pflichtfeld.",
+      "nameRequired": "Name ist ein Pflichtfeld.",
+      "listPriceRequired": "Bitte einen gültigen Listenpreis angeben."
+    },
+    "createSuccess": "Produkt wurde angelegt.",
+    "createError": "Produkt konnte nicht angelegt werden: {{message}}",
+    "updateSuccess": "Produkt wurde aktualisiert.",
+    "updateError": "Produkt konnte nicht aktualisiert werden: {{message}}"
+  },
+  "opportunities": {
+    "heading": "Opportunities",
+    "loading": "Opportunities werden geladen …",
+    "empty": "Keine Opportunities gefunden.",
+    "loadError": "Opportunities konnten nicht geladen werden: {{message}}",
+    "filter": {
+      "status": "Status",
+      "all": "Alle Status"
+    },
+    "columns": {
+      "name": "Name",
+      "amount": "Betrag",
+      "status": "Status",
+      "stage": "Stage",
+      "expectedCloseDate": "Erw. Abschlussdatum"
+    },
+    "status": {
+      "OPEN": "Offen",
+      "WON": "Gewonnen",
+      "LOST": "Verloren"
+    }
+  },
+  "leads": {
+    "heading": "Leads",
+    "create": "Lead anlegen",
+    "loading": "Leads werden geladen …",
+    "empty": "Noch keine Leads vorhanden.",
+    "unassigned": "Nicht zugewiesen",
+    "loadError": "Leads konnten nicht geladen werden: {{message}}",
+    "filter": {
+      "status": "Status",
+      "all": "Alle Status"
+    },
+    "columns": {
+      "title": "Titel",
+      "company": "Firma",
+      "lastName": "Nachname",
+      "email": "E-Mail",
+      "status": "Status",
+      "owner": "Verantwortlicher"
+    },
+    "status": {
+      "NEW": "Neu",
+      "ASSIGNED": "Zugewiesen",
+      "CONTACTED": "Kontaktiert",
+      "QUALIFIED": "Qualifiziert",
+      "DISQUALIFIED": "Disqualifiziert",
+      "CONVERTED": "Konvertiert"
+    },
+    "actions": {
+      "menu": "Aktionen",
+      "assign": "Zuweisen",
+      "contacted": "Als kontaktiert markieren",
+      "qualify": "Qualifizieren",
+      "disqualify": "Disqualifizieren",
+      "contactedSuccess": "Lead wurde als kontaktiert markiert.",
+      "qualifySuccess": "Lead wurde qualifiziert.",
+      "actionError": "Aktion fehlgeschlagen: {{message}}"
+    },
+    "assign": {
+      "dialogTitle": "Lead „{{title}}“ zuweisen",
+      "user": "Nutzer",
+      "userRequired": "Bitte einen Nutzer auswählen.",
+      "usersLoadError": "Nutzer konnten nicht geladen werden: {{message}}",
+      "submit": "Zuweisen",
+      "success": "Lead wurde zugewiesen.",
+      "error": "Lead konnte nicht zugewiesen werden: {{message}}"
+    },
+    "disqualify": {
+      "dialogTitle": "Lead „{{title}}“ disqualifizieren",
+      "reason": "Begründung",
+      "reasonRequired": "Begründung ist ein Pflichtfeld.",
+      "submit": "Disqualifizieren",
+      "success": "Lead wurde disqualifiziert.",
+      "error": "Lead konnte nicht disqualifiziert werden: {{message}}"
+    },
+    "form": {
+      "dialogTitle": "Lead anlegen",
+      "title": "Titel",
+      "company": "Firma",
+      "lastName": "Nachname",
+      "email": "E-Mail",
+      "titleRequired": "Titel ist ein Pflichtfeld.",
+      "companyOrLastNameRequired": "Mindestens eines von Firma oder Nachname muss angegeben werden.",
+      "cancel": "Abbrechen",
+      "submit": "Anlegen"
+    },
+    "createSuccess": "Lead wurde angelegt.",
+    "createError": "Lead konnte nicht angelegt werden: {{message}}"
+  },
+  "accounts": {
+    "heading": "Accounts",
+    "create": "Account anlegen",
+    "loading": "Accounts werden geladen …",
+    "empty": "Keine Accounts gefunden.",
+    "loadError": "Accounts konnten nicht geladen werden: {{message}}",
+    "columns": {
+      "name": "Name",
+      "industry": "Branche",
+      "city": "Ort",
+      "country": "Land"
+    },
+    "rowActions": {
+      "edit": "Account bearbeiten",
+      "delete": "Account löschen"
+    },
+    "form": {
+      "createTitle": "Account anlegen",
+      "editTitle": "Account bearbeiten",
+      "name": "Name",
+      "industry": "Branche",
+      "website": "Website",
+      "street": "Straße",
+      "postalCode": "PLZ",
+      "city": "Ort",
+      "country": "Land",
+      "nameRequired": "Name ist ein Pflichtfeld."
+    },
+    "createSuccess": "Account wurde angelegt.",
+    "createError": "Account konnte nicht angelegt werden: {{message}}",
+    "updateSuccess": "Account wurde aktualisiert.",
+    "updateError": "Account konnte nicht aktualisiert werden: {{message}}",
+    "deleteTitle": "Account löschen",
+    "deleteBody": "Soll der Account „{{name}}“ wirklich gelöscht werden?",
+    "deleteSuccess": "Account wurde gelöscht.",
+    "deleteError": "Account konnte nicht gelöscht werden: {{message}}"
+  },
+  "contacts": {
+    "heading": "Kontakte",
+    "create": "Kontakt anlegen",
+    "loading": "Kontakte werden geladen …",
+    "empty": "Keine Kontakte gefunden.",
+    "loadError": "Kontakte konnten nicht geladen werden: {{message}}",
+    "columns": {
+      "lastName": "Nachname",
+      "firstName": "Vorname",
+      "email": "E-Mail",
+      "phone": "Telefon"
+    },
+    "rowActions": {
+      "edit": "Kontakt bearbeiten",
+      "delete": "Kontakt löschen"
+    },
+    "form": {
+      "createTitle": "Kontakt anlegen",
+      "editTitle": "Kontakt bearbeiten",
+      "lastName": "Nachname",
+      "firstName": "Vorname",
+      "email": "E-Mail",
+      "phone": "Telefon",
+      "account": "Account",
+      "accountNoOptions": "Keine Accounts gefunden",
+      "accountLoading": "Accounts werden geladen …",
+      "lastNameRequired": "Nachname ist ein Pflichtfeld."
+    },
+    "createSuccess": "Kontakt wurde angelegt.",
+    "createError": "Kontakt konnte nicht angelegt werden: {{message}}",
+    "updateSuccess": "Kontakt wurde aktualisiert.",
+    "updateError": "Kontakt konnte nicht aktualisiert werden: {{message}}",
+    "deleteTitle": "Kontakt löschen",
+    "deleteBody": "Soll der Kontakt „{{name}}“ wirklich gelöscht werden?",
+    "deleteSuccess": "Kontakt wurde gelöscht.",
+    "deleteError": "Kontakt konnte nicht gelöscht werden: {{message}}"
+  },
+  "import": {
+    "heading": "Lead-Import",
+    "back": "Zurück",
+    "next": "Weiter",
+    "steps": {
+      "file": "Datei wählen",
+      "mapping": "Mapping",
+      "dryRun": "Dry-Run",
+      "execute": "Import"
+    },
+    "file": {
+      "select": "CSV-Datei wählen",
+      "hint": "Nur CSV-Dateien mit Kopfzeile werden unterstützt (max. 50 MB).",
+      "uploading": "Datei wird hochgeladen …",
+      "uploadError": "Upload fehlgeschlagen: {{message}}",
+      "uploaded": "Datei „{{name}}“ wurde hochgeladen.",
+      "headers": "Erkannte Spalten"
+    },
+    "mapping": {
+      "csvColumn": "CSV-Spalte",
+      "targetField": "Zielfeld",
+      "targetFieldFor": "Zielfeld für Spalte {{column}}",
+      "ignore": "Nicht importieren",
+      "duplicateStrategy": "Duplikatstrategie",
+      "strategies": {
+        "SKIP": "Überspringen",
+        "UPDATE": "Aktualisieren",
+        "CREATE": "Neu anlegen"
+      },
+      "suggestionError": "Mapping-Vorschlag konnte nicht geladen werden: {{message}}",
+      "required": "Bitte mindestens eine Spalte einem Zielfeld zuordnen.",
+      "startDryRun": "Dry-Run starten"
+    },
+    "fields": {
+      "title": "Titel",
+      "companyName": "Firma",
+      "firstName": "Vorname",
+      "lastName": "Nachname",
+      "email": "E-Mail",
+      "phone": "Telefon",
+      "source": "Quelle",
+      "score": "Score",
+      "externalId": "Externe ID"
+    },
+    "run": {
+      "startError": "Lauf konnte nicht gestartet werden: {{message}}",
+      "statusError": "Job-Status konnte nicht geladen werden: {{message}}",
+      "progressWithTotal": "{{processed}} von {{total}} Zeilen verarbeitet",
+      "progress": "{{processed}} Zeilen verarbeitet",
+      "failed": "Der Lauf ist fehlgeschlagen. Bitte Mapping und Datei prüfen.",
+      "totalRows": "Zeilen gesamt",
+      "errorRows": "Fehlerhafte Zeilen",
+      "skippedRows": "Übersprungene Duplikate",
+      "errorsHeading": "Fehlerdetails",
+      "errorsLoadError": "Fehlerliste konnte nicht geladen werden: {{message}}",
+      "errorColumns": {
+        "row": "Zeile",
+        "column": "Spalte",
+        "code": "Code",
+        "message": "Meldung"
+      }
+    },
+    "dryRun": {
+      "running": "Dry-Run läuft …",
+      "done": "Dry-Run abgeschlossen — keine Fehler gefunden.",
+      "doneWithErrors": "Dry-Run abgeschlossen — es wurden Fehler gefunden. Fehlerhafte Zeilen werden beim Import übersprungen.",
+      "startImport": "Import starten"
+    },
+    "execute": {
+      "running": "Import läuft …",
+      "done": "Import abgeschlossen.",
+      "doneWithErrors": "Import abgeschlossen — fehlerhafte Zeilen wurden übersprungen.",
+      "toLeads": "Zu den Leads"
+    }
+  },
+  "footer": {
+    "build": "Build {{sha}}"
+  }
+}

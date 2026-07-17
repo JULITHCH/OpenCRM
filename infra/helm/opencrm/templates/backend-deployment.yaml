@@ -1,0 +1,181 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "opencrm.fullname" . }}-backend
+  labels:
+    {{- include "opencrm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
+spec:
+  {{- if not .Values.backend.hpa.enabled }}
+  replicas: {{ .Values.backend.replicaCount }}
+  {{- end }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # docs/11 Abschnitt 3.1: Rolling Update ohne Kapazitaetsverlust
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      {{- include "opencrm.selectorLabels" (dict "root" $ "component" "backend") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "opencrm.labels" . | nindent 8 }}
+        app.kubernetes.io/component: backend
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        # entspricht dem User im backend/Dockerfile
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      # ----------------------------------------------------------------------
+      # Datenbank-Migrationen (Flyway):
+      # Aktuell fuehrt der Backend-Start die Flyway-Migrationen selbst aus
+      # (application.yml: spring.flyway.* mit eigener Migrator-Rolle). Fuer
+      # dieses Geruest gibt es deshalb KEINEN separaten Migrations-Job.
+      #
+      # TODO (Zero-Downtime, docs/11 Abschnitt 5): Fuer expand-contract-
+      # Deployments Flyway aus dem App-Start herausloesen und als Helm
+      # pre-install/pre-upgrade Hook-Job (Backend-Image, eigener Kommando-
+      # Einstieg mit `flyway migrate` bzw. Migrations-Profil, Rolle
+      # opencrm_migrator) ausfuehren; das Backend validiert beim Start dann
+      # nur noch (`flyway validate`). Alternativ waere hier ein initContainer
+      # moeglich — der Hook-Job ist vorzuziehen, weil er pro Rollout genau
+      # einmal laeuft statt je Replica.
+      # ----------------------------------------------------------------------
+      containers:
+        - name: backend
+          image: {{ include "opencrm.image" .Values.backend.image }}
+          imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            # DB-Zugangsdaten kommen aus einem extern verwalteten Secret
+            # (External Secrets Operator, docs/11 Abschnitt 3.2) — nie aus Values.
+            - name: DB_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.backend.env.dbSecretName }}
+                  key: DB_URL
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.backend.env.dbSecretName }}
+                  key: DB_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.backend.env.dbSecretName }}
+                  key: DB_PASSWORD
+            # Flyway laeuft mit eigener Rolle (Schema-Owner), nie mit der
+            # RLS-beschraenkten App-Rolle (docs/04-multi-tenancy.md):
+            - name: DB_MIGRATOR_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.backend.env.dbSecretName }}
+                  key: DB_MIGRATOR_USER
+            - name: DB_MIGRATOR_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.backend.env.dbSecretName }}
+                  key: DB_MIGRATOR_PASSWORD
+            - name: KEYCLOAK_ISSUER_URI
+              value: {{ .Values.backend.env.keycloakIssuerUri | quote }}
+            {{- if .Values.backend.env.expectedAudience }}
+            - name: OPENCRM_EXPECTED_AUDIENCE
+              value: {{ .Values.backend.env.expectedAudience | quote }}
+            {{- end }}
+            # Persistente, pod-uebergreifende Ablage der Import-/Exportdateien (docs/11):
+            # S3/MinIO in Produktion — kein fluechtiger Pod-lokaler Speicher.
+            - name: OPENCRM_STORAGE_TYPE
+              value: {{ .Values.backend.storage.type | quote }}
+            {{- if eq .Values.backend.storage.type "s3" }}
+            - name: OPENCRM_S3_ENDPOINT
+              value: {{ .Values.backend.storage.s3.endpoint | quote }}
+            - name: OPENCRM_S3_REGION
+              value: {{ .Values.backend.storage.s3.region | quote }}
+            - name: OPENCRM_S3_BUCKET
+              value: {{ .Values.backend.storage.s3.bucket | quote }}
+            - name: OPENCRM_S3_PATH_STYLE
+              value: {{ .Values.backend.storage.s3.pathStyle | quote }}
+            - name: OPENCRM_S3_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.backend.storage.s3.secretName }}
+                  key: S3_ACCESS_KEY
+            - name: OPENCRM_S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.backend.storage.s3.secretName }}
+                  key: S3_SECRET_KEY
+            {{- else }}
+            - name: OPENCRM_STORAGE_ROOT
+              value: {{ .Values.backend.env.storageRoot | quote }}
+            {{- end }}
+            # JSON-Logs mit tenant_id/user_id/request_id (docs/11 Abschnitt 8)
+            - name: SPRING_PROFILES_ACTIVE
+              value: "json"
+            {{- with .Values.backend.env.extra }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          # JVM-Start (inkl. eingebetteter Flyway-Migrationen) kann dauern:
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            periodSeconds: 5
+            failureThreshold: 36
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+          # Graceful Shutdown: preStop gibt dem Ingress Zeit, den Pod aus der
+          # Rotation zu nehmen, bevor der Kontext schliesst (server.shutdown=graceful)
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sleep", "10"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            {{- toYaml .Values.backend.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            {{- if ne .Values.backend.storage.type "s3" }}
+            - name: storage
+              mountPath: {{ .Values.backend.env.storageRoot }}
+            {{- end }}
+      # Genug Zeit fuer Graceful Shutdown (preStop 10s + server.shutdown 20s)
+      terminationGracePeriodSeconds: 40
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        {{- if ne .Values.backend.storage.type "s3" }}
+        # Nur relevant, wenn NICHT S3: lokale Ablage. In Produktion S3 verwenden
+        # (backend.storage.type=s3) — dann entfaellt dieses Volume ganz.
+        - name: storage
+          emptyDir: {}
+        {{- end }}

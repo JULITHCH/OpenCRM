@@ -1,0 +1,53 @@
+{{- if .Values.ingress.enabled }}
+# Routing (docs/11 Abschnitt 3.1):
+#   /      -> Frontend (statische SPA-Assets, Nginx)
+#   /api   -> Backend (Spring Boot, /api/v1/**)
+#   /realms (optional) -> extern betriebener Keycloak (E-46); Standard ist ein
+#           eigener Host (auth.opencrm.example) mit eigenem Ingress des Operators.
+# TLS-Terminierung am Ingress, Zertifikat via cert-manager (docs/11 Abschnitt 9).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "opencrm.fullname" . }}
+  labels:
+    {{- include "opencrm.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.host | quote }}
+      secretName: {{ .Values.ingress.tls.secretName }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host | quote }}
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "opencrm.fullname" . }}-backend
+                port:
+                  number: {{ .Values.backend.service.port }}
+          {{- if .Values.ingress.keycloak.enabled }}
+          - path: /realms
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Values.ingress.keycloak.serviceName }}
+                port:
+                  number: {{ .Values.ingress.keycloak.servicePort }}
+          {{- end }}
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "opencrm.fullname" . }}-frontend
+                port:
+                  number: {{ .Values.frontend.service.port }}
+{{- end }}

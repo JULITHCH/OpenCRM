@@ -1,0 +1,155 @@
+{{- if .Values.networkPolicies.enabled }}
+# E-47: Cluster-intern NetworkPolicies-only in Phase 1 (kein Service-Mesh).
+# Muster: Default-Deny fuer eingehenden Traffic im Namespace, dann explizite
+# Erlaubnisse (Ingress-Controller -> frontend/backend) sowie eingeschraenkter
+# Egress des Backends zu PostgreSQL und Keycloak.
+#
+# Achtung: default-deny-ingress trifft ALLE Pods im Release-Namespace —
+# weitere Workloads im selben Namespace brauchen eigene Allow-Policies.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "opencrm.fullname" . }}-default-deny-ingress
+  labels:
+    {{- include "opencrm.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+---
+# Ingress-Controller -> Frontend (Port 8080)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "opencrm.fullname" . }}-allow-ingress-frontend
+  labels:
+    {{- include "opencrm.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "opencrm.selectorLabels" (dict "root" $ "component" "frontend") | nindent 6 }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicies.ingressController.namespaceSelector | nindent 14 }}
+          {{- with .Values.networkPolicies.ingressController.podSelector }}
+          podSelector:
+            matchLabels:
+              {{- toYaml . | nindent 14 }}
+          {{- end }}
+      ports:
+        - protocol: TCP
+          port: 8080
+---
+# Ingress-Controller -> Backend (Port 8080, /api)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "opencrm.fullname" . }}-allow-ingress-backend
+  labels:
+    {{- include "opencrm.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "opencrm.selectorLabels" (dict "root" $ "component" "backend") | nindent 6 }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicies.ingressController.namespaceSelector | nindent 14 }}
+          {{- with .Values.networkPolicies.ingressController.podSelector }}
+          podSelector:
+            matchLabels:
+              {{- toYaml . | nindent 14 }}
+          {{- end }}
+      ports:
+        - protocol: TCP
+          port: 8080
+{{- if .Values.networkPolicies.backendEgress.enabled }}
+---
+# Backend-Egress: nur DNS, PostgreSQL (E-45) und Keycloak (E-46).
+# Sobald diese Policy greift, ist ALLER andere Egress der Backend-Pods gesperrt.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "opencrm.fullname" . }}-backend-egress
+  labels:
+    {{- include "opencrm.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "opencrm.selectorLabels" (dict "root" $ "component" "backend") | nindent 6 }}
+  policyTypes:
+    - Egress
+  egress:
+    {{- if .Values.networkPolicies.backendEgress.dns }}
+    # DNS (kube-dns / CoreDNS in kube-system)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    {{- end }}
+    # PostgreSQL (Managed Service ausserhalb des Clusters -> CIDR, E-45)
+    - to:
+        - ipBlock:
+            cidr: {{ .Values.networkPolicies.backendEgress.postgres.cidr | quote }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.networkPolicies.backendEgress.postgres.port }}
+    # Keycloak: extern via CIDR ODER In-Cluster via Selektoren (E-46)
+    - to:
+        {{- if .Values.networkPolicies.backendEgress.keycloak.cidr }}
+        - ipBlock:
+            cidr: {{ .Values.networkPolicies.backendEgress.keycloak.cidr | quote }}
+        {{- else }}
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicies.backendEgress.keycloak.namespaceSelector | nindent 14 }}
+          {{- with .Values.networkPolicies.backendEgress.keycloak.podSelector }}
+          podSelector:
+            matchLabels:
+              {{- toYaml . | nindent 14 }}
+          {{- end }}
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.networkPolicies.backendEgress.keycloak.port }}
+{{- end }}
+{{- if .Values.networkPolicies.monitoring.enabled }}
+---
+# Prometheus -> Backend /actuator/prometheus (docs/11 Abschnitt 7)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "opencrm.fullname" . }}-allow-monitoring-backend
+  labels:
+    {{- include "opencrm.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "opencrm.selectorLabels" (dict "root" $ "component" "backend") | nindent 6 }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicies.monitoring.namespaceSelector | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 8080
+{{- end }}
+{{- end }}

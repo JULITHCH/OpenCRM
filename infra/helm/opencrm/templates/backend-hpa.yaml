@@ -1,0 +1,25 @@
+{{- if .Values.backend.hpa.enabled }}
+# HPA auf CPU (Ziel {{ .Values.backend.hpa.targetCPUUtilizationPercentage }} %), docs/11 Abschnitt 3.1.
+# TODO: zweite Metrik Requests/s (custom metric via Prometheus Adapter) ergaenzen.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "opencrm.fullname" . }}-backend
+  labels:
+    {{- include "opencrm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "opencrm.fullname" . }}-backend
+  minReplicas: {{ .Values.backend.hpa.minReplicas }}
+  maxReplicas: {{ .Values.backend.hpa.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.backend.hpa.targetCPUUtilizationPercentage }}
+{{- end }}

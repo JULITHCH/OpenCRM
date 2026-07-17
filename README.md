@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| Status | Konzeptphase (Entwurf) |
+| Status | In Umsetzung — M1–M3-Funktionsumfang implementiert (siehe [Roadmap](docs/12-roadmap.md)) |
 | Stand | 2026-07-16 |
 | Verantwortlich | Lead Architecture |
 
@@ -62,6 +62,8 @@ flowchart LR
 | 10 | [API-Design](docs/10-api-design.md) | Konventionen, Fehlerformat, Endpunkt-Katalog, OpenAPI-Auszug |
 | 11 | [Deployment und Betrieb](docs/11-deployment-und-betrieb.md) | Umgebungen, Docker Compose, Kubernetes, CI/CD, Backup/DR, Monitoring, DSGVO |
 | 12 | [Roadmap](docs/12-roadmap.md) | Meilensteine M1–M3, Abhängigkeiten, Risiken, Ausbaustufen |
+| 13 | [Entscheidungsprotokoll](docs/13-entscheidungen.md) | Auflösung aller offenen Punkte: Produkt- und Architekturentscheidungen (E-01 ff.) |
+| 14 | [Release-Readiness](docs/14-release-readiness.md) | Ergebnis des Multi-Lens-Reviews: behobene und bewusst zurückgestellte Findings |
 
 ### Architekturentscheidungen (ADRs)
 
@@ -76,6 +78,17 @@ Alle wesentlichen Entscheidungen sind als Architecture Decision Records dokument
 | [ADR-005](docs/adr/ADR-005-rest-api-mit-openapi.md) | REST-API mit OpenAPI 3.1 |
 | [ADR-006](docs/adr/ADR-006-import-export-mit-spring-batch.md) | Import/Export mit Spring Batch + PostgreSQL-Job-Tabellen |
 | [ADR-007](docs/adr/ADR-007-frontend-react-spa.md) | Frontend als React-SPA |
+
+## Repository-Struktur
+
+| Verzeichnis | Inhalt |
+|---|---|
+| [`backend/`](backend/README.md) | Spring-Boot-Backend (modularer Monolith, Java 21) — inkl. Flyway-Migrationen und RLS-Isolationstests |
+| [`infra/`](infra/docker-compose.yml) | Lokale Dev-Umgebung (PostgreSQL, Keycloak mit Realm-Import, MinIO) |
+| `frontend/` | React-SPA (folgt als nächstes Inkrement in M1) |
+| [`docs/`](docs/) | Konzept- und Architekturdokumentation, ADRs, Entscheidungsprotokoll |
+
+Schnellstart für Entwickler: siehe [backend/README.md](backend/README.md).
 
 ## Leseempfehlung
 

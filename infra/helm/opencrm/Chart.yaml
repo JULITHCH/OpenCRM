@@ -1,0 +1,16 @@
+apiVersion: v2
+name: opencrm
+description: >-
+  OpenCRM — Backend (Spring Boot) und Frontend (Nginx/SPA) fuer Kubernetes.
+  PostgreSQL und Keycloak laufen extern und sind bewusst NICHT Teil dieses
+  Charts: Managed PostgreSQL empfohlen (E-45, Fallback CloudNativePG),
+  Keycloak als eigenes Deployment ueber den Keycloak-Operator (E-46).
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - crm
+  - spring-boot
+  - react
+maintainers:
+  - name: JULITH GmbH

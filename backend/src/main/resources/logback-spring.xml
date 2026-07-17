@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Logging (docs/11 Abschnitt 8): im Profil "json" strukturierte JSON-Logs mit den Pflichtfeldern
+  tenant_id/user_id/request_id/trace_id (aus dem MDC). Ein Masking-Regex fuer E-Mail-/Telefonmuster
+  dient als zweite Verteidigungslinie gegen versehentliche PII in Logs. Ohne Profil (Dev) bleibt
+  das lesbare Spring-Boot-Standardformat.
+-->
+<configuration>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <springProfile name="json">
+        <appender name="JSON" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+                <includeMdcKeyName>tenant_id</includeMdcKeyName>
+                <includeMdcKeyName>user_id</includeMdcKeyName>
+                <includeMdcKeyName>request_id</includeMdcKeyName>
+                <includeMdcKeyName>trace_id</includeMdcKeyName>
+                <customFields>{"service":"opencrm-backend"}</customFields>
+                <!-- PII-Masking als zweite Verteidigungslinie -->
+                <jsonGeneratorDecorator class="net.logstash.logback.mask.MaskingJsonGeneratorDecorator">
+                    <valueMask>
+                        <value>\b[\w.%+-]+@[\w.-]+\.[A-Za-z]{2,}\b</value>
+                        <mask>***@***</mask>
+                    </valueMask>
+                </jsonGeneratorDecorator>
+            </encoder>
+        </appender>
+        <root level="INFO">
+            <appender-ref ref="JSON"/>
+        </root>
+    </springProfile>
+
+    <springProfile name="!json">
+        <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder>
+                <pattern>${CONSOLE_LOG_PATTERN}</pattern>
+                <charset>utf8</charset>
+            </encoder>
+        </appender>
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
+</configuration>
