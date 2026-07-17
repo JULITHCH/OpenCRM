@@ -33,6 +33,13 @@ echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.
 apt-get update && apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
 ```
 
+Wer nicht als `root` arbeitet, braucht Zugriff auf den Docker-Socket (sonst:
+`permission denied while trying to connect to the docker API`):
+
+```bash
+sudo usermod -aG docker $USER   # danach neu einloggen (oder: newgrp docker)
+```
+
 ## 1. Repository holen
 
 ```bash
