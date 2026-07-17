@@ -1,0 +1,130 @@
+# OpenCRM — Single-Host-Deployment fuer einen LXC-/VM-Container hinter einem
+# vorgelagerten Nginx-Reverse-Proxy (TLS-Terminierung dort).
+#
+# Topologie:
+#   crm.<domain>   --(externer Nginx, HTTPS)-->  LXC:8080  (frontend: SPA + /api-Proxy)
+#   auth.<domain>  --(externer Nginx, HTTPS)-->  LXC:8081  (keycloak)
+#
+# Konfiguration ueber .env (siehe .env.example). Start:  docker compose up -d --build
+#
+# Persistenz: benannte Volumes fuer Postgres und die Import-/Exportdateien.
+# Fuer Mehr-Replica-Betrieb (Kubernetes) siehe infra/helm/opencrm.
+
+name: opencrm
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: opencrm
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD}
+      # von 01-init.sh gelesen:
+      OPENCRM_DB_APP_PASSWORD: ${OPENCRM_DB_APP_PASSWORD}
+      OPENCRM_DB_MIGRATOR_PASSWORD: ${OPENCRM_DB_MIGRATOR_PASSWORD}
+      KEYCLOAK_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+    volumes:
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d opencrm"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    restart: unless-stopped
+    # Prod-Modus; Keycloak baut die DB-Vendor-Konfiguration beim ersten Start automatisch
+    command: ["start", "--import-realm"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Prod-Modus hinter TLS-terminierendem Proxy
+      KC_HOSTNAME: ${AUTH_PUBLIC_URL}
+      KC_HTTP_ENABLED: "true"
+      KC_HTTP_PORT: "8081"
+      KC_PROXY_HEADERS: xforwarded
+      KC_HEALTH_ENABLED: "true"
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USER}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      # Platzhalter im Realm-Export werden hieraus ersetzt:
+      OPENCRM_API_CLIENT_SECRET: ${OPENCRM_API_CLIENT_SECRET}
+      OPENCRM_WEB_REDIRECT_URIS: ${CRM_PUBLIC_URL}/*
+      OPENCRM_WEB_ORIGINS: ${CRM_PUBLIC_URL}
+    ports:
+      - "8081:8081"
+    volumes:
+      - ../keycloak:/opt/keycloak/data/import:ro
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && echo -e 'GET /health/ready HTTP/1.0\\r\\n\\r\\n' >&3 && cat <&3 | grep -q 'UP'"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  backend:
+    build:
+      context: ../../backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/opencrm
+      DB_USER: opencrm_app
+      DB_PASSWORD: ${OPENCRM_DB_APP_PASSWORD}
+      DB_MIGRATOR_USER: opencrm_migrator
+      DB_MIGRATOR_PASSWORD: ${OPENCRM_DB_MIGRATOR_PASSWORD}
+      # Issuer = oeffentliche Keycloak-URL (muss fuer Browser UND Backend gleich sein).
+      # Das Backend erreicht diese URL ueber den vorgelagerten Proxy (Hairpin, siehe README).
+      KEYCLOAK_ISSUER_URI: ${AUTH_PUBLIC_URL}/realms/opencrm
+      OPENCRM_EXPECTED_AUDIENCE: opencrm-api
+      # Single-Host: lokale Ablage auf einem persistenten Volume (S3 nur fuer Mehr-Replica)
+      OPENCRM_STORAGE_TYPE: local
+      OPENCRM_STORAGE_ROOT: /var/opencrm/storage
+      # Strukturierte JSON-Logs mit tenant_id/user_id/request_id
+      SPRING_PROFILES_ACTIVE: json
+      # Falls der Hostname des Auth-Proxys aus dem Container nicht aufloesbar/erreichbar
+      # ist, kann er hier auf die LAN-IP des vorgelagerten Proxys gemappt werden:
+    # extra_hosts:
+    #   - "auth.example.com:192.168.1.10"
+    volumes:
+      - storage-data:/var/opencrm/storage
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080 && echo -e 'GET /actuator/health/readiness HTTP/1.0\\r\\n\\r\\n' >&3 && cat <&3 | grep -q 'UP'"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  frontend:
+    build:
+      context: ../../frontend
+      args:
+        # In das statische Bundle eingebacken (Vite, Build-Zeit):
+        VITE_KEYCLOAK_URL: ${AUTH_PUBLIC_URL}
+        VITE_API_URL: ""
+        VITE_GIT_SHA: ${OPENCRM_GIT_SHA:-release}
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./frontend-nginx.conf:/etc/nginx/nginx.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres-data:
+  storage-data:

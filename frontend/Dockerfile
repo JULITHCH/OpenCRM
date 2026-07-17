@@ -8,16 +8,15 @@ WORKDIR /app
 
 # Hinweis: VITE_*-Variablen werden zur BUILD-Zeit in das Bundle eingebacken.
 # Fuer abweichende Umgebungen als --build-arg setzen (Platzhalter-Domain E-23).
-ARG VITE_API_BASE_URL=/api/v1
+# Vom Frontend-Code tatsaechlich gelesene Variablen (src/api/client.ts, src/auth/keycloak.ts):
+#   VITE_API_URL      leer = relative /api-Pfade (gleiche Origin ueber den Reverse-Proxy)
+#   VITE_KEYCLOAK_URL Basis-URL des Keycloak-Servers (ohne /realms/...)
+ARG VITE_API_URL=
 ARG VITE_KEYCLOAK_URL=https://auth.opencrm.example
-ARG VITE_KEYCLOAK_REALM=opencrm
-ARG VITE_KEYCLOAK_CLIENT_ID=opencrm-web
 # Commit-Stand fuer den Footer (im Image gibt es kein .git): --build-arg VITE_GIT_SHA=$(git rev-parse --short=10 HEAD)
 ARG VITE_GIT_SHA=unknown
-ENV VITE_API_BASE_URL=${VITE_API_BASE_URL} \
+ENV VITE_API_URL=${VITE_API_URL} \
     VITE_KEYCLOAK_URL=${VITE_KEYCLOAK_URL} \
-    VITE_KEYCLOAK_REALM=${VITE_KEYCLOAK_REALM} \
-    VITE_KEYCLOAK_CLIENT_ID=${VITE_KEYCLOAK_CLIENT_ID} \
     VITE_GIT_SHA=${VITE_GIT_SHA}
 
 COPY package.json package-lock.json ./
