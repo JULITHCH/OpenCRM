@@ -109,6 +109,18 @@ Danach `https://crm.<domain>` öffnen und mit diesem Nutzer anmelden.
 
 ## Häufige Stolpersteine
 
+- **`password authentication failed for user "keycloak"` (oder `opencrm_app`)**: Das
+  Init-Script `postgres-init/01-init.sh` läuft **nur beim ersten Anlegen** des Volumes
+  `opencrm_postgres-data`. Wurde der Stack schon einmal mit anderen (z. B. den
+  `change-me-*`-Default-)Passwörtern gestartet, behält die DB die alten Passwörter, während
+  Keycloak/Backend die neuen aus der `.env` verwenden — Anmeldung schlägt fehl.
+  - **Neu-Installation ohne echte Daten:** `docker compose down -v && docker compose up -d --build`
+    (⚠️ `-v` löscht DB- und Ablage-Volume — nur bei frischer Installation!).
+  - **Daten behalten:** Passwörter angleichen — `docker compose exec -T postgres psql -U postgres
+    -d postgres -c "ALTER ROLE keycloak PASSWORD '...';"` (analog `opencrm_app`,
+    `opencrm_migrator`), danach `docker compose restart keycloak backend`.
+
+  Rollen prüfen: `docker compose exec postgres psql -U postgres -c "\du"`.
 - **Login schlägt fehl / Redirect-Fehler**: Die Redirect-URIs des Clients `opencrm-web` im
   Realm müssen `https://crm.<domain>/*` enthalten. Werden die `OPENCRM_WEB_*`-Platzhalter beim
   Import nicht ersetzt, in der Keycloak-Admin-Konsole (Client `opencrm-web`) manuell setzen.
