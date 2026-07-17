@@ -112,9 +112,16 @@ Danach `https://crm.<domain>` öffnen und mit diesem Nutzer anmelden.
 - **Login schlägt fehl / Redirect-Fehler**: Die Redirect-URIs des Clients `opencrm-web` im
   Realm müssen `https://crm.<domain>/*` enthalten. Werden die `OPENCRM_WEB_*`-Platzhalter beim
   Import nicht ersetzt, in der Keycloak-Admin-Konsole (Client `opencrm-web`) manuell setzen.
-- **Backend meldet `invalid_token` / erreicht Keycloak nicht**: Der `issuer` im Token ist
-  `https://auth.<domain>/realms/opencrm` — das Backend muss **dieselbe** URL erreichen können
-  (Hairpin über den Proxy). Wenn der LXC seinen eigenen öffentlichen Namen nicht auflöst,
-  im `backend`-Service in `docker-compose.yml` `extra_hosts` auf die LAN-IP des Proxys setzen
-  (auskommentiertes Beispiel ist enthalten).
+- **Backend meldet `invalid_token` / erreicht Keycloak nicht (Hairpin)**: Der `issuer` im Token
+  ist `https://auth.<domain>/realms/opencrm` — das Backend muss **dieselbe** öffentliche URL
+  erreichen können. Zeigt dieser Name per DNS auf den vorgelagerten Proxy und kommt der Container
+  dort nicht raus (kein NAT-Hairpin), im `backend`-Service in `docker-compose.yml` `extra_hosts`
+  einkommentieren:
+  - Proxy auf **anderem** Host im LAN: `- "auth.<domain>:<LAN-IP-des-Proxys>"`
+  - Proxy auf **demselben** Host wie Docker: `- "auth.<domain>:host-gateway"`
+
+  Danach `docker compose up -d backend`. Test von innen:
+  `docker compose exec backend sh -c "wget -qO- https://auth.<domain>/realms/opencrm/.well-known/openid-configuration | head -c 80"`.
+  Kommt JSON zurück, ist der Hairpin gesetzt. Voraussetzung: der Proxy liefert für `auth.<domain>`
+  ein **gültiges** Zertifikat (kein selbstsigniertes — die JVM prüft es).
 - **`nesting`**: Startet Docker im LXC nicht, fehlt meist `features: nesting=1` am Container.

@@ -92,10 +92,13 @@ services:
       OPENCRM_STORAGE_ROOT: /var/opencrm/storage
       # Strukturierte JSON-Logs mit tenant_id/user_id/request_id
       SPRING_PROFILES_ACTIVE: json
-      # Falls der Hostname des Auth-Proxys aus dem Container nicht aufloesbar/erreichbar
-      # ist, kann er hier auf die LAN-IP des vorgelagerten Proxys gemappt werden:
+      # Hairpin: Das Backend muss die OEFFENTLICHE Auth-URL (KEYCLOAK_ISSUER_URI)
+      # selbst erreichen. Loest der Container den oeffentlichen Namen nicht auf bzw.
+      # kann der Router kein NAT-Hairpin, hier auth.<domain> auf den Proxy mappen:
+      #   - Proxy auf ANDEREM Host:  "auth.example.com:192.168.1.10"  (LAN-IP des Proxys)
+      #   - Proxy auf DIESEM Host:   "auth.example.com:host-gateway"  (Docker-Sonderwert)
     # extra_hosts:
-    #   - "auth.example.com:192.168.1.10"
+    #   - "auth.example.com:host-gateway"
     volumes:
       - storage-data:/var/opencrm/storage
     healthcheck:
